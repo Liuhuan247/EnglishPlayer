@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="英语视频学习播放器总体架构：UI层、应用服务层、媒体核心层、基础设施四层，含关键数据流与跨端预留边界">
+<title>总体架构</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;background:#fff;color:#1F2329;padding:4px 2px}
+  .arch{width:100%;max-width:100%;display:flex;flex-direction:column;gap:14px}
+  .layer{border:1px solid #DEE3E8;border-radius:10px;padding:12px 14px;background:#FAFBFD}
+  .layer-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .layer-badge{font-size:12px;font-weight:600;color:#fff;background:#0A84FF;border-radius:5px;padding:2px 8px;letter-spacing:.5px}
+  .layer-title{font-size:16px;font-weight:600;color:#1F2329}
+  .layer-sub{font-size:13px;color:#646A73;margin-left:auto}
+  .mods{display:flex;flex-wrap:wrap;gap:8px}
+  .mod{border:1px solid #DEE3E8;background:#fff;border-radius:8px;padding:8px 12px;font-size:14px;line-height:1.5;flex:1 1 auto;min-width:150px;max-width:240px}
+  .mod b{display:block;font-size:14px;color:#1F2329;font-weight:600}
+  .mod span{font-size:13px;color:#646A73}
+  .mod.core{border-color:#B9D4F5;background:#F0F6FF}
+  .mod.core b{color:#0A5DC2}
+  .flow{display:flex;align-items:center;gap:8px;margin:2px 0 2px 12px;font-size:13px;color:#646A73}
+  .flow .arrow{color:#0A84FF;font-weight:600;white-space:nowrap}
+  .flow .note{flex:1}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#646A73;margin-top:2px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+  @media (max-width:640px){
+    .mod{min-width:100%;max-width:100%}
+    .layer-sub{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="arch">
+
+  <div class="layer">
+    <div class="layer-head">
+      <span class="layer-badge">UI</span>
+      <span class="layer-title">界面层（SwiftUI）</span>
+      <span class="layer-sub">与设计稿一一对应 · 不直接触碰媒体</span>
+    </div>
+    <div class="mods">
+      <div class="mod"><b>PlayerView</b><span>视频画面 / 双语字幕 / 波形 / 控制条</span></div>
+      <div class="mod"><b>SentenceList</b><span>句列表 / 搜索 / 当前句高亮</span></div>
+      <div class="mod"><b>NetdiskView</b><span>网盘浏览 / 下载进度 / 缓存管理</span></div>
+      <div class="mod"><b>SettingsView</b><span>字幕 / 倍速 / 缓存 / 快捷键</span></div>
+    </div>
+  </div>
+
+  <div class="flow"><span class="arrow">▲ 状态流</span><span class="note">播放状态 · 当前句 · 波形位置 · 下载进度（ObservableObject 单向驱动）</span></div>
+
+  <div class="layer">
+    <div class="layer-head">
+      <span class="layer-badge">SVC</span>
+      <span class="layer-title">应用服务层（业务编排）</span>
+      <span class="layer-sub">不感知 AVFoundation 细节</span>
+    </div>
+    <div class="mods">
+      <div class="mod"><b>PlaybackSession</b><span>播放会话 · 倍速 · 单句/A-B 循环 · 断点</span></div>
+      <div class="mod"><b>SubtitleEngine</b><span>SRT/LRC 解析 · 双语配对 · 偏移校正</span></div>
+      <div class="mod"><b>SentenceEngine</b><span>句模型 · 当前句状态机 · 盲听</span></div>
+      <div class="mod"><b>WaveformService</b><span>波形提取 · 缓存 · 播放头定位</span></div>
+      <div class="mod"><b>DictionaryService</b><span>选中词 → 欧陆词典唤起</span></div>
+      <div class="mod"><b>NetdiskService</b><span>OAuth · 列表/搜索 · 下载缓存</span></div>
+      <div class="mod"><b>LibraryService</b><span>媒体项 · 播放列表 · 进度记录</span></div>
+    </div>
+  </div>
+
+  <div class="flow"><span class="arrow">▼ 指令 / ▲ 数据</span><span class="note">open / play / seek / rate / recordSentence —— 只面向协议，不面向实现</span></div>
+
+  <div class="layer">
+    <div class="layer-head">
+      <span class="layer-badge">CORE</span>
+      <span class="layer-title">媒体核心层（MediaCore 协议 + 实现）</span>
+      <span class="layer-sub">跨端预留边界：未来 Windows / Linux / 移动端替换实现</span>
+    </div>
+    <div class="mods">
+      <div class="mod core"><b>MediaCoreProtocol</b><span>open / play / pause / seek / setRate / waveform(_:)</span></div>
+      <div class="mod core"><b>AVPlayerKit（macOS）</b><span>AVPlayer 播放 · 倍速不变调 · 精确 seek · 时间回调</span></div>
+      <div class="mod core"><b>WaveformExtractor</b><span>AVAssetReader → PCM → vDSP 峰值包络</span></div>
+      <div class="mod core"><b>Recorder（V2）</b><span>AVAudioEngine 跟读录音 · 波形叠加对齐</span></div>
+    </div>
+  </div>
+
+  <div class="flow"><span class="arrow">▼ 依赖</span><span class="note">SQLite（本地库 / 进度 / 缓存索引） · Keychain（网盘 Token） · URLSession（网盘下载 / dlink）</span></div>
+
+  <div class="layer">
+    <div class="layer-head">
+      <span class="layer-badge">INFRA</span>
+      <span class="layer-title">基础设施</span>
+      <span class="layer-sub"></span>
+    </div>
+    <div class="mods">
+      <div class="mod"><b>Store（SQLite）</b><span>媒体项 / 句子 / 播放状态 / 缓存记录 / 设置</span></div>
+      <div class="mod"><b>Keychain</b><span>百度 access_token / refresh_token</span></div>
+      <div class="mod"><b>NetworkLayer</b><span>xpan API · dlink 下载 · Range 断点续传</span></div>
+      <div class="mod"><b>CacheManager</b><span>缓存目录 · 容量管理 · 删除</span></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i style="background:#F0F6FF;border:1px solid #B9D4F5"></i>媒体核心（协议 + macOS 实现）</span>
+    <span><i style="background:#0A84FF"></i>关键数据流（播放 / 波形 / 下载）</span>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>英语学习播放器 · UI 设计稿 V1</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230A84FF'/%3E%3Cpath d='M13 10l9 6-9 6z' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#ffffff; --sidebar:#f2f2f7; --sep:#e5e5ea; --sep2:#d8d8de;
+  --text:#1d1d1f; --text2:#6e6e73; --text3:#aeaeb2;
+  --accent:#0a84ff; --accent-soft:#e8f2ff; --accent-deep:#0071e3;
+  --orange:#ff9f0a; --green:#34c759; --red:#ff3b30;
+  --win-shadow:0 24px 60px rgba(0,0,0,.20),0 4px 14px rgba(0,0,0,.08);
+  --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+  color:var(--text); background:#0f1115;
+  -webkit-font-smoothing:antialiased;
+}
+/* ===== 页面导航 ===== */
+.app-shell{max-width:1320px;margin:0 auto;padding:28px 32px 60px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand .logo{width:38px;height:38px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center}
+.brand .logo svg{width:20px;height:20px}
+.brand h1{font-size:17px;font-weight:650;color:#fff;letter-spacing:.2px}
+.brand p{font-size:12px;color:#8e8e93;margin-top:2px}
+.tabs{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:10px}
+.tab{
+  appearance:none;border:0;background:transparent;color:#b9b9c0;font-size:13px;font-weight:500;
+  padding:7px 14px;border-radius:7px;cursor:pointer;font-family:inherit;transition:all .15s ease;
+}
+.tab:hover{color:#fff}
+.tab.active{background:#fff;color:#1d1d1f;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+/* ===== macOS 窗口 ===== */
+.view{display:none}
+.view.active{display:block;animation:viewIn .18s ease}
+@keyframes viewIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.macwin{
+  width:1180px;max-width:100%;margin:0 auto;background:var(--bg);
+  border-radius:12px;overflow:hidden;box-shadow:var(--win-shadow);
+  border:1px solid rgba(255,255,255,.08);
+}
+.titlebar{
+  height:38px;background:#ececf0;border-bottom:1px solid var(--sep2);
+  display:flex;align-items:center;gap:12px;padding:0 14px;position:relative;user-select:none;
+}
+.traffic{display:flex;gap:8px}
+.dot{width:12px;height:12px;border-radius:50%}
+.dot.r{background:#ff5f57;border:1px solid #e0443e}
+.dot.y{background:#febc2e;border:1px solid #d89e24}
+.dot.g{background:#28c840;border:1px solid #1aab29}
+.wintitle{position:absolute;left:50%;transform:translateX(-50%);font-size:13px;font-weight:600;color:#4a4a4f}
+.winmenu{margin-left:auto;display:flex;gap:4px}
+.winmenu button{width:26px;height:22px;border-radius:5px;border:0;background:transparent;color:#4a4a4f;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.winmenu button:hover{background:#dcDcdF}
+.winmenu svg{width:13px;height:13px}
+.winbody{display:flex;height:652px}
+/* ===== 通用组件 ===== */
+.sidebar{width:248px;min-width:248px;background:var(--sidebar);border-right:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden}
+.side-search{padding:10px 12px 8px}
+.searchbox{display:flex;align-items:center;gap:6px;background:#e9e9ee;border-radius:7px;padding:5px 9px;border:1px solid transparent;transition:border .15s}
+.searchbox:focus-within{border-color:var(--accent);background:#fff}
+.searchbox svg{width:13px;height:13px;color:var(--text3);flex:none}
+.searchbox input{border:0;background:transparent;outline:0;font-size:12.5px;font-family:inherit;color:var(--text);width:100%}
+.searchbox input::placeholder{color:var(--text3)}
+.side-head{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.4px;padding:10px 14px 6px;text-transform:uppercase}
+.side-list{flex:1;overflow-y:auto;padding:0 8px 10px}
+.sentence{
+  padding:7px 9px;border-radius:7px;cursor:pointer;margin-bottom:1px;border-left:3px solid transparent;transition:background .12s;
+}
+.sentence:hover{background:#e8e8ed}
+.sentence.cur{background:var(--accent-soft);border-left-color:var(--accent)}
+.sentence .idx{font-size:10.5px;color:var(--text3);font-weight:600;margin-bottom:2px}
+.sentence .en{font-size:12.5px;color:var(--text);line-height:1.5}
+.sentence.cur .en{font-weight:600;color:var(--accent-deep)}
+.sentence .zh{font-size:11px;color:var(--text2);line-height:1.45;margin-top:1px;display:none}
+.sentence.show-zh .zh{display:block}
+.content{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+/* 播放区 */
+.player{flex:1;position:relative;background:#0b0c0e;min-height:0;display:flex;align-items:center;justify-content:center}
+.player .video-art{position:absolute;inset:0;background:radial-gradient(120% 120% at 30% 20%,#1c2430 0%,#0b0d12 55%,#05060a 100%);overflow:hidden}
+.player .video-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 60%,rgba(0,0,0,.55) 100%)}
+.player .center-btn{
+  position:relative;z-index:2;width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.16);
+  border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s,background .12s;
+}
+.player .center-btn:hover{background:rgba(255,255,255,.26);transform:scale(1.04)}
+.player .center-btn svg{width:24px;height:24px;margin-left:3px}
+.player .subtitle{
+  position:absolute;bottom:18px;left:0;right:0;z-index:2;text-align:center;padding:0 24px;
+}
+.player .subtitle .sub-en{font-size:23px;font-weight:650;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5);line-height:1.4}
+.player .subtitle .sub-en b{color:#7cb8ff}
+.player .subtitle .sub-zh{font-size:14px;color:rgba(255,255,255,.78);margin-top:4px;line-height:1.5}
+.player .timecode{position:absolute;top:14px;right:16px;z-index:2;font-size:11.5px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums}
+/* 控制条 */
+.controlbar{background:#fafafc;border-top:1px solid var(--sep);padding:10px 18px 12px}
+.progress-row{display:flex;align-items:center;gap:12px;margin-bottom:9px}
+.progress-row .time{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.slider{flex:1;height:4px;border-radius:2px;background:#e0e0e6;position:relative;cursor:pointer}
+.slider .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--accent)}
+.slider .knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#fff;border:1px solid #c7c7cc;box-shadow:0 1px 3px rgba(0,0,0,.18);left:38%}
+.ctrl-row{display:flex;align-items:center;gap:6px}
+.ctrl-row .spacer{flex:1}
+.icobtn{
+  width:34px;height:30px;border-radius:7px;border:0;background:transparent;color:#4a4a50;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .12s,color .12s;position:relative;
+}
+.icobtn:hover{background:#e8e8ee}
+.icobtn svg{width:17px;height:17px}
+.icobtn.on{color:var(--accent)}
+.icobtn.on::after{content:"";position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:12px;height:2.5px;border-radius:1px;background:var(--accent)}
+.icobtn.primary{background:var(--accent);color:#fff;width:40px;height:34px}
+.icobtn.primary:hover{background:var(--accent-deep)}
+.icobtn.primary svg{width:19px;height:19px}
+.speedbtn{
+  display:flex;align-items:center;gap:5px;height:30px;padding:0 11px;border-radius:7px;border:1px solid var(--sep2);
+  background:#fff;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:border .12s;
+}
+.speedbtn:hover{border-color:#b9b9c0}
+.speedbtn svg{width:11px;height:11px;color:var(--text3)}
+.speedmenu{
+  position:absolute;bottom:36px;left:50%;transform:translateX(-50%) scale(.96);transform-origin:bottom center;opacity:0;pointer-events:none;
+  background:#fff;border-radius:9px;box-shadow:0 12px 32px rgba(0,0,0,.18);border:1px solid var(--sep);
+  padding:5px;min-width:120px;z-index:30;transition:opacity .12s,transform .12s;
+}
+.speedmenu.open{opacity:1;transform:translateX(-50%) scale(1);pointer-events:auto}
+.speedmenu button{display:flex;width:100%;justify-content:space-between;align-items:center;padding:6px 10px;border:0;background:transparent;border-radius:6px;font-size:12.5px;color:var(--text);cursor:pointer;font-family:inherit}
+.speedmenu button:hover{background:#f0f0f4}
+.speedmenu button.cur{color:var(--accent);font-weight:600}
+.speedmenu button svg{width:12px;height:12px}
+/* 波形条 */
+.wavebar{display:flex;align-items:center;gap:14px;padding:12px 18px;border-top:1px solid var(--sep);background:#fff}
+.wavebar .wave-label{font-size:11px;color:var(--text3);white-space:nowrap;display:flex;flex-direction:column;gap:2px}
+.wavebar .wave-label b{font-size:12px;color:var(--text);font-weight:600}
+.wave{flex:1;height:54px;cursor:pointer;position:relative;display:flex;align-items:center;gap:1.5px;overflow:hidden}
+.wave .bar{flex:1;background:#e0e0e6;border-radius:2px;transition:background .15s}
+.wave .bar.play{background:var(--accent)}
+.wave .playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);border-radius:1px;pointer-events:none;left:44%}
+.wave .playhead::before{content:"";position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+/* 底部状态 */
+.statusbar{display:flex;align-items:center;gap:10px;padding:8px 18px;background:var(--sidebar);border-top:1px solid var(--sep);font-size:11.5px;color:var(--text2)}
+.statusbar .dot-ico{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none}
+/* 通用列表 */
+.plain-list{flex:1;overflow-y:auto}
+.row{display:flex;align-items:center;gap:11px;padding:9px 14px;cursor:pointer;border-radius:8px;margin:0 8px;transition:background .12s}
+.row:hover{background:#f4f4f7}
+.row.sel{background:var(--accent-soft)}
+.row .ricon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
+.row .ricon svg{width:17px;height:17px}
+.row .rname{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .rmeta{font-size:11px;color:var(--text3);margin-top:1px}
+.row .right{margin-left:auto;display:flex;align-items:center;gap:8px;flex:none}
+.badge{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:99px;color:#fff;background:var(--text3)}
+.badge.blue{background:var(--accent)}
+.badge.green{background:var(--green)}
+.badge.orange{background:var(--orange)}
+.badge.gray{background:#8e8e93}
+.badge.red{background:var(--red)}
+/* toast */
+.toast{
+  position:fixed;left:50%;bottom:34px;transform:translate(-50%,16px);opacity:0;pointer-events:none;z-index:99;
+  background:rgba(29,29,31,.92);color:#fff;font-size:13px;padding:10px 18px;border-radius:9px;
+  box-shadow:0 8px 24px rgba(0,0,0,.28);transition:opacity .18s,transform .18s;display:flex;align-items:center;gap:8px;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast svg{width:14px;height:14px;color:#7cb8ff}
+/* ===== 视图2 查词 ===== */
+.toolbar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--sep)}
+.toolbar .t-title{font-size:13.5px;font-weight:600;margin-right:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:var(--text2);background:#f2f2f7;border:1px solid var(--sep);border-radius:99px;padding:4px 11px;cursor:pointer}
+.chip:hover{border-color:#b9b9c0}
+.chip svg{width:11px;height:11px}
+.lookup-panel{flex:1;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f7f7fa,#fbfbfd);position:relative}
+.lookup-card{
+  width:560px;max-width:86%;background:#fff;border-radius:14px;border:1px solid var(--sep);
+  box-shadow:0 18px 44px rgba(0,0,0,.10);padding:20px 22px;position:relative;
+}
+.lookup-card .kw{font-size:21px;font-weight:700;color:var(--text)}
+.lookup-card .ph{font-size:13px;color:var(--text3);margin:2px 0 10px;font-family:ui-monospace,Menlo,monospace}
+.lookup-card .def{margin-top:8px}
+.lookup-card .def .pos{font-size:11px;color:var(--text3);font-weight:600;margin-bottom:3px}
+.lookup-card .def p{font-size:13.5px;line-height:1.7;color:var(--text)}
+.lookup-card .def .eg{font-size:12.5px;color:var(--text2);border-left:3px solid var(--sep);padding-left:10px;margin-top:6px;line-height:1.6}
+.lookup-actions{display:flex;gap:9px;margin-top:16px;padding-top:14px;border-top:1px solid var(--sep)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 15px;border-radius:8px;border:1px solid var(--sep2);background:#fff;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:all .12s}
+.btn:hover{border-color:#b9b9c0}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-deep)}
+.btn svg{width:13px;height:13px}
+.eudic-banner{
+  position:absolute;bottom:24px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;
+  background:#fff;border:1px solid var(--sep);border-radius:99px;padding:8px 16px;box-shadow:0 10px 26px rgba(0,0,0,.10);font-size:12.5px;color:var(--text2);
+}
+.eudic-banner .e-logo{width:20px;height:20px;border-radius:6px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex:none}
+.eudic-banner .e-logo svg{width:11px;height:11px}
+.eudic-banner b{color:var(--text)}
+/* ===== 视图3 网盘 ===== */
+.pathbar{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);padding:10px 16px;border-bottom:1px solid var(--sep);background:#fff}
+.pathbar .crumb{color:var(--text2);cursor:pointer;padding:2px 5px;border-radius:5px}
+.pathbar .crumb:hover{background:#f0f0f4;color:var(--text)}
+.pathbar .crumb.cur{color:var(--text);font-weight:600}
+.pathbar .sep-c{color:var(--text3)}
+.filegrid{flex:1;overflow-y:auto;padding:12px}
+.file-head{display:grid;grid-template-columns:1fr 120px 130px 96px;gap:10px;padding:0 14px 8px;font-size:11px;color:var(--text3);font-weight:600}
+.filerow{display:grid;grid-template-columns:1fr 120px 130px 96px;gap:10px;align-items:center;padding:9px 14px;border-radius:8px;cursor:pointer;transition:background .12s}
+.filerow:hover{background:#f4f4f7}
+.filerow .f-main{display:flex;align-items:center;gap:11px;min-width:0}
+.filerow .fname{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.filerow .fmeta{font-size:11px;color:var(--text3)}
+.f-cell{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.download-btn{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:7px;border:1px solid var(--sep2);background:#fff;font-size:11.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit}
+.download-btn:hover{border-color:var(--accent);color:var(--accent)}
+.download-btn.doing{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);cursor:default}
+.download-btn.done{border-color:#c7e6cf;color:#248a3d;background:#effaf2;cursor:default}
+/* ===== 视图4 播放列表 ===== */
+.queue{flex:1;overflow-y:auto;padding:8px}
+.qitem{display:flex;align-items:center;gap:12px;padding:8px 12px;border-radius:9px;cursor:grab;transition:background .12s}
+.qitem:hover{background:#f4f4f7}
+.qitem.playing{background:var(--accent-soft)}
+.qitem .qnum{width:20px;text-align:right;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums}
+.qitem .qinfo{flex:1;min-width:0}
+.qitem .qtitle{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qitem .qsub{font-size:11px;color:var(--text3);margin-top:1px}
+.qitem .qact{display:flex;gap:2px;opacity:0;transition:opacity .12s}
+.qitem:hover .qact{opacity:1}
+/* ===== 视图5 设置 ===== */
+.settings{flex:1;overflow-y:auto;padding:6px 0}
+.set-group{padding:6px 22px 14px;border-bottom:1px solid var(--sep)}
+.set-group h4{font-size:12px;font-weight:650;color:var(--text);margin-bottom:10px}
+.set-row{display:flex;align-items:center;gap:14px;padding:8px 0}
+.set-row .s-label{font-size:13px;color:var(--text);flex:1}
+.set-row .s-desc{font-size:11px;color:var(--text3);margin-top:2px}
+.switch{width:38px;height:23px;border-radius:12px;background:#e0e0e6;border:0;position:relative;cursor:pointer;transition:background .15s;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+.switch.on{background:var(--accent)}
+.switch.on::after{left:17px}
+.seg{display:inline-flex;background:#e9e9ee;border-radius:8px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;font-size:12px;font-weight:500;color:var(--text2);padding:4px 12px;border-radius:6px;cursor:pointer;font-family:inherit}
+.seg button.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.shortcut-row{display:flex;align-items:center;gap:12px;padding:7px 0;font-size:12.5px}
+.shortcut-row .sc-name{flex:1;color:var(--text)}
+.shortcut-row kbd{font-family:inherit;font-size:11.5px;color:var(--text);background:#f2f2f7;border:1px solid var(--sep2);border-bottom-width:2px;border-radius:5px;padding:2px 7px;min-width:24px;text-align:center}
+.cachebar{height:8px;border-radius:4px;background:#e9e9ee;overflow:hidden;flex:1;max-width:300px}
+.cachebar .cfill{height:100%;border-radius:4px;background:var(--orange);width:46%}
+/* ===== 视图6 规范 ===== */
+.specwin{width:1180px}
+.spec-body{display:flex;gap:0;height:652px}
+.spec-left{width:248px;min-width:248px;background:var(--sidebar);border-right:1px solid var(--sep);padding:16px 14px}
+.spec-left h3{font-size:13px;font-weight:650;margin-bottom:14px}
+.arch{margin-top:8px;display:flex;flex-direction:column;gap:8px}
+.arch .node{background:#fff;border:1px solid var(--sep);border-radius:9px;padding:9px 12px;font-size:12px;color:var(--text)}
+.arch .node.core{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+.arch .node .sub{font-size:10.5px;color:var(--text3);font-weight:400;margin-top:3px;line-height:1.5}
+.arch .link{text-align:center;color:var(--text3);font-size:11px;line-height:1}
+.spec-main{flex:1;overflow-y:auto;padding:20px 26px}
+.swatches{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.swatch{width:112px;border:1px solid var(--sep);border-radius:10px;overflow:hidden}
+.swatch .scolor{height:54px}
+.swatch .sname{font-size:11px;color:var(--text2);padding:6px 8px}
+.swatch .sname b{display:block;font-size:12px;color:var(--text);font-weight:600;margin-bottom:1px}
+.type-row{display:flex;align-items:baseline;gap:18px;padding:9px 0;border-bottom:1px solid var(--sep)}
+.type-row .t-label{width:110px;font-size:11px;color:var(--text3);flex:none}
+.control-demo{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 0}
+.spec-note{font-size:11.5px;color:var(--text3);line-height:1.7;margin-top:4px}
+/* 响应式 */
+@media (max-width:900px){
+  .app-shell{padding:16px 12px 40px}
+  .topbar{flex-direction:column;align-items:stretch}
+  .tabs{overflow-x:auto}
+  .macwin{width:100%}
+  .winbody{height:auto;flex-direction:column}
+  .sidebar{width:100%;min-width:0;max-height:260px;border-right:0;border-bottom:1px solid var(--sep)}
+  .spec-body{flex-direction:column;height:auto}
+  .spec-left{width:100%;min-width:0}
+  .file-head,.filerow{grid-template-columns:1fr 90px 80px}
+  .file-head .fh4,.filerow .f-cell:last-child{display:none}
+}
+</style>
+</head>
+<body>
+<!-- ===== 页面导航 ===== -->
+<div class="app-shell">
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M9 6.5v11l9-5.5-9-5.5z" fill="#fff"/><rect x="3" y="4" width="18" height="16" rx="3" stroke="#fff" stroke-opacity=".35"/></svg></div>
+      <div>
+        <h1>英语学习播放器 · UI 设计稿</h1>
+        <p>macOS 原生 · V1.0 · 高保真设计稿（点击可交互预览）</p>
+      </div>
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-view="v1">01 主播放器</button>
+      <button class="tab" data-view="v2">02 查词</button>
+      <button class="tab" data-view="v3">03 百度网盘</button>
+      <button class="tab" data-view="v4">04 播放列表</button>
+      <button class="tab" data-view="v5">05 设置</button>
+      <button class="tab" data-view="v6">06 规范与架构</button>
+    </div>
+  </div>
+
+<!-- ===== 视图 01：主播放器 ===== -->
+<div class="view active" id="v1">
+<div class="macwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">Friends · S01E01 · 逐句精听</div>
+    <div class="winmenu">
+      <button title="隐藏字幕" id="btnHideSub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></button>
+      <button title="A-B 循环" id="btnAB"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h12M4 9l3-3M4 9l3 3M20 15H8M20 15l-3-3M20 15l-3 3"/></svg></button>
+      <button title="窗口操作" id="btnWin"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button>
+    </div>
+  </div>
+  <div class="winbody">
+    <div class="sidebar">
+      <div class="side-search"><div class="searchbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-3.8-3.8"/></svg><input id="sentenceSearch" type="text" placeholder="搜索字幕内容"></div></div>
+      <div class="side-head">字幕 · 共 128 句</div>
+      <div class="side-list" id="sentenceList"></div>
+    </div>
+    <div class="content">
+      <div class="player">
+        <div class="video-art"></div>
+        <div class="timecode">00:12:38 / 00:22:04</div>
+        <button class="center-btn" id="btnPlay"><svg viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg></button>
+        <div class="subtitle">
+          <div class="sub-en" id="subEn"><b>I'll be there for you</b>, 'cause you're there for me too.</div>
+          <div class="sub-zh" id="subZh">我会一直在你身边，因为你也会一直在我身边。</div>
+        </div>
+      </div>
+      <div class="wavebar">
+        <div class="wave-label"><b>当前句波形</b><span>点击定位 · 录音对比预留</span></div>
+        <div class="wave" id="wave" title="句级波形：点击波形内任意位置定位到该句的对应时刻"></div>
+      </div>
+      <div class="controlbar">
+        <div class="progress-row">
+          <span class="time">00:12:38</span>
+          <div class="slider" id="progSlider"><div class="fill" style="width:57%"></div><div class="knob" style="left:57%"></div></div>
+          <span class="time">00:22:04</span>
+        </div>
+        <div class="ctrl-row">
+          <button class="icobtn" title="上一句" id="btnPrev"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2.4v14H6zM18 5v14L9 12z"/></svg></button>
+          <button class="icobtn primary" title="播放 / 暂停" id="btnPlaySmall"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg></button>
+          <button class="icobtn" title="下一句" id="btnNext"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.6 5H18v14h-2.4zM6 5v14l9-7z"/></svg></button>
+          <button class="icobtn" title="单句循环" id="btnLoop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button>
+          <button class="icobtn" title="A-B 循环" id="btnAB2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9h12M4 9l3-3M4 9l3 3M20 15H8M20 15l-3-3M20 15l-3 3"/></svg></button>
+          <div style="position:relative">
+            <button class="speedbtn" id="speedBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 7v5l3.2 2"/><circle cx="12" cy="12" r="8.5"/></svg>1.0x<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+            <div class="speedmenu" id="speedMenu">
+              <button data-sp="0.5">0.5x</button>
+              <button data-sp="0.75">0.75x</button>
+              <button data-sp="1.0" class="cur"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>1.0x</button>
+              <button data-sp="1.25">1.25x</button>
+              <button data-sp="1.5">1.5x</button>
+              <button data-sp="2.0">2.0x</button>
+            </div>
+          </div>
+          <div class="spacer"></div>
+          <button class="icobtn" title="音量" id="btnVol"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a9 9 0 0 1 0 12"/></svg></button>
+          <span class="time" style="font-size:12px">倍速 1.0x · 单句循环关</span>
+        </div>
+      </div>
+      <div class="statusbar">
+        <span class="dot-ico"></span>
+        <span>字幕已加载 SRT · 本地视频 · 断点续播 00:12:38</span>
+        <span style="margin-left:auto;color:var(--text3)">Space 播放/暂停 · ← → 上一句/下一句 · 1-5 倍速</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 视图 02：查词 ===== -->
+<div class="view" id="v2">
+<div class="macwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">查词 · 欧陆词典</div>
+    <div class="winmenu"><button id="btnWin2"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button></div>
+  </div>
+  <div class="winbody" style="flex-direction:column;height:652px">
+    <div class="toolbar">
+      <span class="t-title">点击字幕中的单词 → 唤起欧陆词典</span>
+      <span class="chip" id="chipSub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg>双语字幕</span>
+      <span class="chip" id="chipLoop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>单句循环</span>
+    </div>
+    <div class="lookup-panel">
+      <div class="lookup-card">
+        <div class="kw">available <span style="font-weight:500;font-size:13px;color:var(--text3)">/əˈveɪləbl/</span></div>
+        <div class="ph">查询来源：欧陆词典 · 本地</div>
+        <div class="def">
+          <div class="pos">adj.</div>
+          <p>可获得的；可购得的；有空的</p>
+          <p>If you are available, we could watch an episode together.</p>
+          <div class="eg">例句：I'll be there for you, if you're <b style="color:var(--accent-deep)">available</b> tonight.</div>
+        </div>
+        <div class="lookup-actions">
+          <button class="btn primary" id="btnOpenEudic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>在欧陆词典中打开</button>
+          <button class="btn" id="btnCollect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7.5-4.6-9.5-9C1 7.5 3.2 4.5 6.5 4.5c2 0 3.4 1.2 4 2.2.6-1 2-2.2 4-2.2 3.3 0 5.5 3 4 6.5-2 4.4-9.5 9-9.5 9z"/></svg>加入生词本</button>
+          <button class="btn" id="btnMark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg>标记已掌握</button>
+        </div>
+      </div>
+      <div class="eudic-banner">
+        <span class="e-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M5 4h11a2 2 0 0 1 2 2v14l-2.5-1.6L13 20l-2.5-1.6L8 20V6a2 2 0 0 1 2-2z"/></svg></span>
+        <span>单词已通过 <b>欧陆词典（Eudic）</b> 本地查询 · 不采集、不上传</span>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 视图 03：百度网盘 ===== -->
+<div class="view" id="v3">
+<div class="macwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">百度网盘 · 英语学习素材</div>
+    <div class="winmenu"><button id="btnWin3"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button></div>
+  </div>
+  <div class="winbody" style="flex-direction:column;height:652px">
+    <div class="pathbar">
+      <span class="crumb">我的网盘</span><span class="sep-c">/</span>
+      <span class="crumb">英语学习</span><span class="sep-c">/</span>
+      <span class="crumb cur">美剧</span>
+      <span style="margin-left:auto;display:flex;gap:6px">
+        <span class="chip" id="chipRefresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>刷新</span>
+        <span class="chip" id="chipSpace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>已用 62.3 GB / 2 TB</span>
+      </span>
+    </div>
+    <div class="filegrid">
+      <div class="file-head">
+        <span>文件名</span><span>大小</span><span>缓存状态</span><span class="fh4">操作</span>
+      </div>
+      <div class="filerow" data-state="done">
+        <div class="f-main"><span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></span><div><div class="fname">Friends.S01E01.The.One.Where.Monica.Gets.A.New.Roommate.mkv</div><div class="fmeta">视频 · MKV · 720p · 341 MB · 2024-03-12</div></div></div>
+        <div class="f-cell">341 MB</div>
+        <div class="f-cell"><span class="badge green">已缓存</span></div>
+        <div class="f-cell"><button class="download-btn done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 21h16"/></svg>已下载</button></div>
+      </div>
+      <div class="filerow" data-state="doing">
+        <div class="f-main"><span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></span><div><div class="fname">Modern.Family.S01E01.mp4</div><div class="fmeta">视频 · MP4 · 1080p · 486 MB · 2024-05-02</div></div></div>
+        <div class="f-cell">486 MB</div>
+        <div class="f-cell"><span class="badge orange" id="dlBadge">下载中 68%</span></div>
+        <div class="f-cell"><button class="download-btn doing" id="dlBtn">68%</button></div>
+      </div>
+      <div class="filerow" data-state="todo">
+        <div class="f-main"><span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></span><div><div class="fname">The.Crown.S01E01.mp4</div><div class="fmeta">视频 · MP4 · 1080p · 512 MB · 2024-06-18</div></div></div>
+        <div class="f-cell">512 MB</div>
+        <div class="f-cell"><span class="badge gray">未缓存</span></div>
+        <div class="f-cell"><button class="download-btn" id="dlBtn3">下载</button></div>
+      </div>
+      <div class="filerow">
+        <div class="f-main"><span class="ricon" style="background:#effaf2;color:#248a3d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11 6z"/><path d="M4 6v12"/></svg></span><div><div class="fname">BBC.6Minute.English.2026-09.mp3</div><div class="fmeta">音频 · MP3 · 32 MB · 2026-09-15</div></div></div>
+        <div class="f-cell">32 MB</div>
+        <div class="f-cell"><span class="badge green">已缓存</span></div>
+        <div class="f-cell"><button class="download-btn done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 21h16"/></svg>已下载</button></div>
+      </div>
+      <div class="filerow">
+        <div class="f-main"><span class="ricon" style="background:#f2f2f7;color:#6e6e73"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span><div><div class="fname">Friends.字幕.S01.zip</div><div class="fmeta">压缩包 · ZIP · 1.2 MB · 2024-01-20</div></div></div>
+        <div class="f-cell">1.2 MB</div>
+        <div class="f-cell"><span class="badge gray">未缓存</span></div>
+        <div class="f-cell"><button class="download-btn">下载</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 视图 04：播放列表 ===== -->
+<div class="view" id="v4">
+<div class="macwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">播放列表 · 今晚连播</div>
+    <div class="winmenu"><button id="btnWin4"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button></div>
+  </div>
+  <div class="winbody" style="flex-direction:column;height:652px">
+    <div class="toolbar">
+      <span class="t-title">播放队列（4）</span>
+      <span class="chip" id="chipCont"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M16 9l4 3-4 3z"/></svg>连续播放</span>
+      <span class="chip" id="chipShuf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>随机</span>
+      <span style="margin-left:auto;color:var(--text3);font-size:11.5px">拖拽排序 · 自动续播断点</span>
+    </div>
+    <div class="queue">
+      <div class="qitem playing">
+        <span class="qnum">1</span>
+        <span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg></span>
+        <div class="qinfo"><div class="qtitle">Friends S01E01 — The One Where Monica Gets a New Roommate</div><div class="qsub">美剧 · 22:04 · 字幕已加载 · 进度 57%</div></div>
+        <div class="qact">
+          <button class="icobtn" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+      <div class="qitem">
+        <span class="qnum">2</span>
+        <span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></span>
+        <div class="qinfo"><div class="qtitle">Friends S01E02 — The One with the Sonogram at the End</div><div class="qsub">美剧 · 22:18 · 无字幕（待匹配）</div></div>
+        <div class="qact">
+          <button class="icobtn" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+      <div class="qitem">
+        <span class="qnum">3</span>
+        <span class="ricon" style="background:#effaf2;color:#248a3d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l11 6z"/><path d="M4 6v12"/></svg></span>
+        <div class="qinfo"><div class="qtitle">BBC 6 Minute English — Is technology making us lazy?</div><div class="qsub">播客 · 06:12 · LRC 逐句字幕</div></div>
+        <div class="qact">
+          <button class="icobtn" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+      <div class="qitem">
+        <span class="qnum">4</span>
+        <span class="ricon" style="background:#e8f2ff;color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 15h4M13 15h4M7 11h4M13 11h4"/></svg></span>
+        <div class="qinfo"><div class="qtitle">The Crown S01E01 — Wolverton</div><div class="qsub">美剧 · 58:32 · 网盘已缓存 · 进度 12%</div></div>
+        <div class="qact">
+          <button class="icobtn" title="移除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 视图 05：设置 ===== -->
+<div class="view" id="v5">
+<div class="macwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">设置</div>
+    <div class="winmenu"><button id="btnWin5"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button></div>
+  </div>
+  <div class="winbody" style="flex-direction:column;height:652px">
+    <div class="settings">
+      <div class="set-group">
+        <h4>字幕</h4>
+        <div class="set-row"><span class="s-label">显示模式<div class="s-desc">双语 / 仅英文 / 仅中文 / 隐藏（盲听）</div></span><div class="seg" id="segSub"><button class="on">双语</button><button>仅英文</button><button>仅中文</button><button>隐藏</button></div></div>
+        <div class="set-row"><span class="s-label">字号<div class="s-desc">主字幕 18–32 pt</div></span><span class="seg" id="segSize"><button>-</button><button class="on">23 pt</button><button>+</button></span></div>
+        <div class="set-row"><span class="s-label">时间偏移<div class="s-desc">字幕与声音不同步时的整体校正</div></span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:var(--text2)" id="offsetVal">+120 ms</span><span class="cachebar" style="max-width:200px"><span class="cfill" style="background:var(--accent);width:56%"></span></span></span></div>
+      </div>
+      <div class="set-group">
+        <h4>播放</h4>
+        <div class="set-row"><span class="s-label">变速不变调<div class="s-desc">调整倍速时保持音高不变</div></span><span class="switch on" id="swPitch"></span></div>
+        <div class="set-row"><span class="s-label">自动断点续播<div class="s-desc">重新打开文件时回到上次位置</div></span><span class="switch on" id="swResume"></span></div>
+        <div class="set-row"><span class="s-label">默认倍速<div class="s-desc">新文件打开时的播放速度</div></span><span class="seg" id="segSpeed"><button>0.75x</button><button class="on">1.0x</button><button>1.25x</button><button>1.5x</button></span></div>
+      </div>
+      <div class="set-group">
+        <h4>百度网盘缓存</h4>
+        <div class="set-row"><span class="s-label">缓存目录<div class="s-desc">/Users/liuhuan/Library/Application Support/EnglishPlayer/Cache</div></span><span class="btn" id="btnCacheDir" style="height:28px;padding:0 12px">更改…</span></div>
+        <div class="set-row"><span class="s-label">已用空间<div class="s-desc">5 个文件 · 2.1 GB</div></span><span style="display:flex;align-items:center;gap:12px"><span class="cachebar"><span class="cfill"></span></span><span style="font-size:12px;color:var(--text2)">46%</span><span class="btn" id="btnClearCache" style="height:28px;padding:0 12px">清理缓存</span></span></div>
+      </div>
+      <div class="set-group">
+        <h4>快捷键</h4>
+        <div class="shortcut-row"><span class="sc-name">播放 / 暂停</span><kbd>Space</kbd></div>
+        <div class="shortcut-row"><span class="sc-name">上一句 / 下一句</span><kbd>←</kbd><kbd>→</kbd></div>
+        <div class="shortcut-row"><span class="sc-name">单句循环 / A-B 循环</span><kbd>L</kbd><kbd>B</kbd></div>
+        <div class="shortcut-row"><span class="sc-name">倍速 0.5–2.0x</span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd></div>
+        <div class="shortcut-row"><span class="sc-name">隐藏字幕（盲听）</span><kbd>H</kbd></div>
+        <div class="shortcut-row"><span class="sc-name">音量</span><kbd>↑</kbd><kbd>↓</kbd></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 视图 06：规范与架构 ===== -->
+<div class="view" id="v6">
+<div class="macwin specwin">
+  <div class="titlebar">
+    <div class="traffic"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+    <div class="wintitle">设计规范 · 信息架构</div>
+    <div class="winmenu"><button id="btnWin6"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18" r="1.6"/></svg></button></div>
+  </div>
+  <div class="spec-body">
+    <div class="spec-left">
+      <h3>信息架构</h3>
+      <div class="arch">
+        <div class="node">媒体源<div class="sub">本地文件 · 百度网盘（下载缓存）</div></div>
+        <div class="link">↓</div>
+        <div class="node">播放引擎<div class="sub">音视频解码 · 倍速不变调 · 断点续播</div></div>
+        <div class="link">↓</div>
+        <div class="node core">按句学习引擎<div class="sub">句列表 · 单句/A-B 循环 · 波形定位 · 盲听</div></div>
+        <div class="link">↓</div>
+        <div class="node">学习辅助<div class="sub">欧陆词典查词 · 生词本（V2）· 跟读对比（V2）</div></div>
+      </div>
+    </div>
+    <div class="spec-main">
+      <h4 style="font-size:13px;font-weight:650;margin-bottom:12px">色彩</h4>
+      <div class="swatches">
+        <div class="swatch"><div class="scolor" style="background:#0A84FF"></div><div class="sname"><b>系统蓝</b>#0A84FF 主操作 / 选中 / 进度</div></div>
+        <div class="swatch"><div class="scolor" style="background:#1D1D1F"></div><div class="sname"><b>主文字</b>#1D1D1F</div></div>
+        <div class="swatch"><div class="scolor" style="background:#6E6E73"></div><div class="sname"><b>次要文字</b>#6E6E73</div></div>
+        <div class="swatch"><div class="scolor" style="background:#F2F2F7"></div><div class="sname"><b>侧栏背景</b>#F2F2F7</div></div>
+        <div class="swatch"><div class="scolor" style="background:#E5E5EA"></div><div class="sname"><b>分隔线</b>#E5E5EA</div></div>
+        <div class="swatch"><div class="scolor" style="background:#FF9F0A"></div><div class="sname"><b>警示橙</b>#FF9F0A 下载中 / 提醒</div></div>
+      </div>
+      <h4 style="font-size:13px;font-weight:650;margin:18px 0 6px">字体</h4>
+      <div class="type-row"><span class="t-label">界面字体</span><span style="font-size:15px;font-weight:600">SF Pro / PingFang SC — 系统默认</span></div>
+      <div class="type-row"><span class="t-label">主字幕</span><span style="font-size:23px;font-weight:650;letter-spacing:.3px">I'll be there for you</span></div>
+      <div class="type-row"><span class="t-label">句列表 / 正文</span><span style="font-size:13px;color:var(--text2)">12–13 pt，行高 1.5</span></div>
+      <div class="type-row"><span class="t-label">数字 / 时间</span><span style="font-family:ui-monospace,Menlo,monospace;font-size:13px">00:12:38 · tabular-nums</span></div>
+      <h4 style="font-size:13px;font-weight:650;margin:18px 0 8px">控件</h4>
+      <div class="control-demo">
+        <span class="chip" style="cursor:default">标签 Chip</span>
+        <span class="btn" style="cursor:default">普通按钮</span>
+        <span class="btn primary" style="cursor:default">主按钮</span>
+        <span class="seg"><button class="on">段 1</button><button>段 2</button></span>
+        <span class="switch on" style="cursor:default"></span>
+        <span class="badge green">状态徽标</span>
+        <span class="badge orange">进行中</span>
+      </div>
+      <p class="spec-note">规范要点：圆角统一 8–10 px；选中态统一使用系统蓝浅底 #E8F2FF + 蓝色主文字；图标采用 SF Symbols 风格（2 pt 圆头线条）；所有可点击元素 hover 有浅灰反馈；列表行高 ≥ 40 px 保证点击面积。设计语言完全跟随 macOS 系统控件，保证原生感与后续 SwiftUI 实现零偏差。</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- todo: 视图骨架完成，JS 交互待补充 -->
+</div><!-- /app-shell -->
+<div class="toast" id="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span id="toastMsg">已跳转到第 3 句</span></div>
+
+<script>
+/* ===== 通用 toast ===== */
+var toastTimer;
+function toast(msg){
+  var t = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 1800);
+}
+/* ===== 视图切换 ===== */
+var tabs = document.querySelectorAll('.tab');
+tabs.forEach(function(tab){
+  tab.addEventListener('click', function(){
+    tabs.forEach(function(t){ t.classList.remove('active'); });
+    tab.classList.add('active');
+    document.querySelectorAll('.view').forEach(function(v){ v.classList.remove('active'); });
+    document.getElementById(tab.getAttribute('data-view')).classList.add('active');
+  });
+});
+/* ===== 视图1：句列表与播放 ===== */
+var SENTENCES = [
+  ['00:00:42','There\'s nothing to tell! He\'s just some guy I work with!','没什么好说的！他只是我的同事而已！'],
+  ['00:01:03','Come on, you\'re going out with the guy! There\'s gotta be something wrong with him!','拜托，你正和这家伙约会！他肯定有什么问题！'],
+  ['00:01:31','So does he have a hump? A hump and a hairpiece?','那他是不是驼背？驼背还戴假发？'],
+  ['00:02:14','Wait, does he eat chalk? Just trying to figure out if this guy is cool.','等等，他吃粉笔吗？我只是想弄清楚这家伙酷不酷。'],
+  ['00:02:40','I\'ll be there for you, \'cause you\'re there for me too.','我会一直在你身边，因为你也会一直在我身边。'],
+  ['00:03:05','It\'s like all my life everyone has always told me, "You\'re a shoe!"','好像我这一生所有人都告诉我：你就是一只鞋子！'],
+  ['00:03:48','Well, this is a real kick in the head.','好吧，这真是当头一棒。'],
+  ['00:04:22','So that\'s it? We\'re just gonna break up?','就这样？我们就这样分手了？'],
+  ['00:05:10','You know, honey, he was just a perfect guy for you.','亲爱的，你知道他真的很适合你。'],
+  ['00:05:44','Welcome to the real world! It sucks. You\'re gonna love it!','欢迎来到现实世界！它糟透了，但你一定会爱上它！']
+];
+function renderSentences(filter){
+  var list = document.getElementById('sentenceList');
+  list.innerHTML = '';
+  SENTENCES.forEach(function(s, i){
+    var f = (filter || '').toLowerCase();
+    if (f && s[0].toLowerCase().indexOf(f) === -1 && s[1].toLowerCase().indexOf(f) === -1 && s[2].toLowerCase().indexOf(f) === -1) return;
+    var el = document.createElement('div');
+    el.className = 'sentence' + (i === 4 ? ' cur show-zh' : '');
+    el.innerHTML = '<div class="idx">#' + (i+1) + ' · ' + s[0] + '</div><div class="en">' + s[1] + '</div><div class="zh">' + s[2] + '</div>';
+    el.addEventListener('click', function(){
+      document.querySelectorAll('.sentence').forEach(function(x){ x.classList.remove('cur','show-zh'); });
+      el.classList.add('cur','show-zh');
+      toast('已跳转到第 ' + (i+1) + ' 句 · ' + s[0]);
+    });
+    list.appendChild(el);
+  });
+}
+renderSentences('');
+document.getElementById('sentenceSearch').addEventListener('input', function(e){ renderSentences(e.target.value); });
+/* 播放 / 暂停 */
+function togglePlay(){
+  var btn = document.getElementById('btnPlay');
+  var btnS = document.getElementById('btnPlaySmall');
+  var playing = btn.dataset.playing === '1';
+  btn.dataset.playing = playing ? '0' : '1';
+  btnS.dataset.playing = playing ? '0' : '1';
+  btn.innerHTML = playing ? '<svg viewBox="0 0 24 24" fill="#fff"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg>' : '<svg viewBox="0 0 24 24" fill="#fff"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z"/></svg>';
+  btnS.innerHTML = playing ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5z"/></svg>' : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z"/></svg>';
+  toast(playing ? '已暂停' : '正在播放 · 当前句');
+}
+document.getElementById('btnPlay').addEventListener('click', togglePlay);
+document.getElementById('btnPlaySmall').addEventListener('click', togglePlay);
+document.getElementById('btnPrev').addEventListener('click', function(){ toast('上一句 · #5'); });
+document.getElementById('btnNext').addEventListener('click', function(){ toast('下一句 · #6'); });
+/* 循环按钮 */
+document.getElementById('btnLoop').addEventListener('click', function(){
+  this.classList.toggle('on');
+  toast(this.classList.contains('on') ? '单句循环：开' : '单句循环：关');
+});
+document.getElementById('btnAB2').addEventListener('click', function(){
+  this.classList.toggle('on');
+  toast(this.classList.contains('on') ? 'A-B 循环：已设置起点 A' : 'A-B 循环：关');
+});
+document.getElementById('btnAB').addEventListener('click', function(){
+  this.classList.toggle('on');
+  toast(this.classList.contains('on') ? 'A-B 循环：已设置起点 A' : 'A-B 循环：关');
+});
+/* 倍速菜单 */
+var speedBtn = document.getElementById('speedBtn');
+var speedMenu = document.getElementById('speedMenu');
+speedBtn.addEventListener('click', function(e){ e.stopPropagation(); speedMenu.classList.toggle('open'); });
+document.addEventListener('click', function(){ speedMenu.classList.remove('open'); });
+speedMenu.querySelectorAll('button').forEach(function(b){
+  b.addEventListener('click', function(){
+    speedMenu.querySelectorAll('button').forEach(function(x){ x.classList.remove('cur'); x.innerHTML = x.getAttribute('data-sp') + 'x'; });
+    b.classList.add('cur');
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>' + b.getAttribute('data-sp') + 'x';
+    speedBtn.firstChild.textContent = ' '; 
+    speedBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 7v5l3.2 2"/><circle cx="12" cy="12" r="8.5"/></svg>' + b.getAttribute('data-sp') + 'x<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+    toast('倍速已设为 ' + b.getAttribute('data-sp') + 'x');
+  });
+});
+/* 隐藏字幕 */
+document.getElementById('btnHideSub').addEventListener('click', function(){
+  var en = document.getElementById('subEn'), zh = document.getElementById('subZh');
+  var hidden = en.style.visibility === 'hidden';
+  en.style.visibility = hidden ? 'visible' : 'hidden';
+  zh.style.visibility = hidden ? 'visible' : 'hidden';
+  toast(hidden ? '字幕已显示' : '字幕已隐藏 · 盲听模式');
+});
+/* 波形 */
+var waveEl = document.getElementById('wave');
+var WAVE_N = 96;
+var waveHTML = '';
+for (var i = 0; i < WAVE_N; i++){
+  var t = i / (WAVE_N - 1);
+  var env = Math.pow(Math.sin(Math.PI * t), 0.85);
+  var syll = 0.72 * Math.exp(-Math.pow((i - 20) / 10, 2))
+           + 1.0 * Math.exp(-Math.pow((i - 47) / 8, 2))
+           + 0.9 * Math.exp(-Math.pow((i - 66) / 11, 2))
+           + 0.55 * Math.exp(-Math.pow((i - 86) / 8, 2));
+  var jitter = 0.8 + 0.2 * Math.sin(i * 2.9 + 1.3);
+  var a = Math.min(1, env * syll * jitter);
+  var h = Math.max(3, Math.round(a * 44));
+  waveHTML += '<div class="bar' + (i < 42 ? ' play' : '') + '" style="height:' + h + 'px"></div>';
+}
+waveEl.innerHTML = waveHTML + '<div class="playhead" id="wavePlayhead"></div>';
+function wavePos(ratio){
+  var ph = document.getElementById('wavePlayhead');
+  ph.style.left = (ratio * 100) + '%';
+  var bars = waveEl.querySelectorAll('.bar');
+  for (var j = 0; j < bars.length; j++){
+    if (j / bars.length < ratio) bars[j].classList.add('play');
+    else bars[j].classList.remove('play');
+  }
+}
+waveEl.addEventListener('click', function(e){
+  var rect = waveEl.getBoundingClientRect();
+  var ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  wavePos(ratio);
+  toast('波形定位：当前句 ' + Math.round(ratio * 100) + '% 处');
+});
+/* 进度条 */
+document.getElementById('progSlider').addEventListener('click', function(e){
+  var rect = this.getBoundingClientRect();
+  var ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  this.querySelector('.fill').style.width = (ratio * 100) + '%';
+  this.querySelector('.knob').style.left = (ratio * 100) + '%';
+  toast('进度：00:' + String(Math.round(ratio * 1320 / 60)).padStart(2,'0'));
+});
+/* ===== 视图2 ===== */
+document.getElementById('btnOpenEudic').addEventListener('click', function(){ toast('已唤起欧陆词典查询 available'); });
+document.getElementById('btnCollect').addEventListener('click', function(){ toast('已加入生词本（演示）'); });
+document.getElementById('btnMark').addEventListener('click', function(){ toast('已标记为掌握（演示）'); });
+document.getElementById('chipSub').addEventListener('click', function(){ this.classList.toggle('on'); toast('字幕显示模式：双语 / 隐藏 切换（演示）'); });
+/* ===== 视图3 ===== */
+document.getElementById('chipRefresh').addEventListener('click', function(){ toast('网盘列表已刷新（演示）'); });
+document.getElementById('chipSpace').addEventListener('click', function(){ toast('网盘空间：已用 62.3 GB / 2 TB（演示）'); });
+var dlCount = 68;
+document.getElementById('dlBtn').addEventListener('click', function(){
+  dlCount = Math.min(100, dlCount + 8);
+  document.getElementById('dlBadge').textContent = '下载中 ' + dlCount + '%';
+  this.textContent = dlCount + '%';
+  if (dlCount >= 100){
+    document.getElementById('dlBadge').className = 'badge green';
+    document.getElementById('dlBadge').textContent = '已缓存';
+    this.className = 'download-btn done';
+    this.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 21h16"/></svg>已下载';
+    toast('下载完成 · 已加入缓存');
+  }
+});
+document.getElementById('dlBtn3').addEventListener('click', function(){
+  this.className = 'download-btn doing';
+  this.textContent = '0%';
+  toast('开始下载（演示）· 网盘限速以实际为准');
+});
+/* ===== 视图4 ===== */
+document.getElementById('chipCont').addEventListener('click', function(){ this.classList.toggle('on'); toast('连续播放：开 / 关（演示）'); });
+document.getElementById('chipShuf').addEventListener('click', function(){ this.classList.toggle('on'); toast('随机播放：开 / 关（演示）'); });
+/* ===== 视图5 ===== */
+document.querySelectorAll('#segSub button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('#segSub button').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    toast('字幕显示：' + b.textContent + '（演示）');
+  });
+});
+document.querySelectorAll('#segSize button').forEach(function(b){
+  b.addEventListener('click', function(){
+    toast('字幕字号调整（演示）');
+  });
+});
+document.querySelectorAll('#segSpeed button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('#segSpeed button').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    toast('默认倍速：' + b.textContent + '（演示）');
+  });
+});
+document.getElementById('swPitch').addEventListener('click', function(){ this.classList.toggle('on'); toast('变速不变调：开 / 关（演示）'); });
+document.getElementById('swResume').addEventListener('click', function(){ this.classList.toggle('on'); toast('自动断点续播：开 / 关（演示）'); });
+document.getElementById('btnCacheDir').addEventListener('click', function(){ toast('选择缓存目录（演示）'); });
+document.getElementById('btnClearCache').addEventListener('click', function(){ toast('缓存清理完成 · 已释放 2.1 GB（演示）'); });
+/* 键盘快捷键（演示） */
+document.addEventListener('keydown', function(e){
+  if (e.code === 'Space'){ e.preventDefault(); if (document.getElementById('v1').classList.contains('active')) togglePlay(); }
+  if (e.key === 'ArrowLeft'){ if (document.getElementById('v1').classList.contains('active')) toast('上一句 · #5'); }
+  if (e.key === 'ArrowRight'){ if (document.getElementById('v1').classList.contains('active')) toast('下一句 · #6'); }
+});
+</script>
+</body>
+</html>

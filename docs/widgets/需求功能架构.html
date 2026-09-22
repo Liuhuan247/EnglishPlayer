@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="use-iframe" content="true">
+<meta name="html-box-height-mode" content="auto">
+<meta name="description" content="V1功能架构全景图：媒体源、播放引擎、字幕系统、按句学习引擎与学习辅助的模块关系">
+<title>V1 功能架构全景</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2329; background: #ffffff; }
+  .wrap { width: 100%; max-width: 100%; padding: 4px 0; }
+  .title { font-size: 15px; font-weight: 600; color: #1f2329; margin-bottom: 10px; }
+  .layer { margin-bottom: 10px; }
+  .cards { display: flex; gap: 10px; flex-wrap: wrap; }
+  .card { flex: 1 1 0; min-width: 210px; border: 1px solid #e1e5ea; border-radius: 10px; padding: 10px 12px; background: #ffffff; }
+  .card.core { border-color: #1f6f78; background: #f2f9f8; }
+  .card h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .card.core h3 { color: #1f6f78; }
+  .card ul { list-style: none; }
+  .card li { font-size: 12px; color: #4a5158; line-height: 1.75; padding-left: 10px; position: relative; }
+  .card li::before { content: ""; position: absolute; left: 0; top: 8px; width: 4px; height: 4px; border-radius: 50%; background: #9aa3ac; }
+  .card.core li::before { background: #1f6f78; }
+  .tag { display: inline-block; font-size: 11px; color: #8a929b; border: 1px solid #d5dae0; border-radius: 4px; padding: 0 5px; margin-left: 4px; }
+  .tag.warn { color: #b07a1f; border-color: #e8cf9e; }
+  .arrow { text-align: center; font-size: 12px; color: #1f6f78; margin: 4px 0; }
+  .arrow b { font-weight: 600; }
+  .caption { font-size: 11px; color: #8a929b; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title">V1 功能架构全景</div>
+
+  <div class="layer">
+    <div class="cards">
+      <div class="card"><h3>媒体源</h3><ul><li>本地视频 / 音频</li><li>百度网盘下载缓存<span class="tag warn">V1 采用</span></li><li>网盘在线流式<span class="tag warn">后续迭代</span></li></ul></div>
+      <div class="card"><h3>播放引擎</h3><ul><li>视频 / 音频解码</li><li>倍速 0.5x–2.0x（变速不变调）</li><li>进度拖拽 · 断点记忆</li></ul></div>
+      <div class="card"><h3>字幕系统</h3><ul><li>SRT / VTT / ASS / LRC</li><li>双语显示 · 字号可调</li><li>偏移校正 · 同名自动匹配</li></ul></div>
+    </div>
+  </div>
+
+  <div class="arrow">▼　<b>核心链路：字幕时间轴 → 按句播放</b>　▼</div>
+
+  <div class="layer">
+    <div class="card core"><h3>按句学习引擎（核心特色）</h3><ul><li>句列表侧栏 · 点击跳转播放该句</li><li>上一句 / 下一句（快捷键）</li><li>单句循环 · A-B 循环</li><li>当前句高亮 · 隐藏字幕盲听</li><li>句级波形 · 点击定位（录音对比预留）</li></ul></div>
+  </div>
+
+  <div class="arrow">▲　<b>学习辅助</b>　▲</div>
+
+  <div class="layer">
+    <div class="cards">
+      <div class="card"><h3>V1 已纳入</h3><ul><li>欧陆词典查词（点击唤起）</li><li>播放列表 · 快捷键体系</li></ul></div>
+      <div class="card"><h3>V2 再纳入</h3><ul><li>生词本 / 收藏</li><li>无字幕 ASR 自动分句</li><li>跟读录音对比 · 学习统计</li></ul></div>
+    </div>
+  </div>
+
+  <div class="caption">图：V1 功能架构。按句学习引擎为核心，媒体源、播放引擎与字幕系统为支撑，句级波形为 V2 录音对比预留。</div>
+</div>
+</body>
+</html>
