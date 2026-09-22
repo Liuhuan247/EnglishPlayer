@@ -77,6 +77,63 @@ final class SubtitleEngineTests: XCTestCase {
     }
 }
 
+final class EmbeddedSubtitleTests: XCTestCase {
+    func testChoosesEnglishAndChineseTextTracks() {
+        let log = """
+        Stream #0:0(eng): Video: hevc
+        Stream #0:1(eng): Audio: truehd
+        Stream #0:2(eng): Subtitle: subrip (default)
+        Stream #0:3(chi): Subtitle: ass
+        Stream #0:4(eng): Subtitle: hdmv_pgs_subtitle
+        """
+        let tracks = EmbeddedSubtitles.tracks(in: log)
+        XCTAssertEqual(tracks.count, 3)
+        let chosen = EmbeddedSubtitles.selection(from: tracks)
+        XCTAssertEqual(chosen?.primary, 0)
+        XCTAssertEqual(chosen?.secondary, 1)
+    }
+
+    func testImageSubtitlesAreNotSelectable() {
+        let log = "Stream #0:2: Subtitle: hdmv_pgs_subtitle\n"
+        XCTAssertNil(EmbeddedSubtitles.selection(from: EmbeddedSubtitles.tracks(in: log)))
+    }
+
+    func testExtractsEmbeddedEnglishAndChinese() async throws {
+        guard let ffmpeg = MediaCompat.locateFFmpeg() else {
+            throw XCTSkip("没有 ffmpeg")
+        }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("ep-subs-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let english = dir.appendingPathComponent("en.srt")
+        let chinese = dir.appendingPathComponent("zh.srt")
+        try Data("1\n00:00:00,000 --> 00:00:01,000\nHello\n\n".utf8).write(to: english)
+        try Data("1\n00:00:00,000 --> 00:00:01,000\n你好\n\n".utf8).write(to: chinese)
+        let mkv = dir.appendingPathComponent("clip.mkv")
+        let process = Process()
+        process.executableURL = ffmpeg
+        process.arguments = [
+            "-hide_banner", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=mono:sample_rate=44100:d=1",
+            "-i", english.path, "-i", chinese.path,
+            "-map", "0:a", "-map", "1:0", "-map", "2:0",
+            "-c:a", "aac", "-c:s", "srt",
+            "-metadata:s:s:0", "language=eng",
+            "-metadata:s:s:1", "language=chi",
+            "-shortest", mkv.path
+        ]
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: mkv.path) else {
+            throw XCTSkip("ffmpeg 没能生成带字幕的测试文件")
+        }
+        let result = await EmbeddedSubtitles.extract(url: mkv, headers: [:])
+        XCTAssertEqual(result.sentences.count, 1)
+        XCTAssertEqual(result.sentences[0].textEn, "Hello")
+        XCTAssertEqual(result.sentences[0].textZh, "你好")
+    }
+}
+
 final class SentenceEngineTests: XCTestCase {
     func testSentenceLoopSeeksToStart() {
         var engine = SentenceEngine()
@@ -290,8 +347,38 @@ final class RemuxLaunchTests: XCTestCase {
         let jumped = RemuxLaunch.arguments(source: source, headers: ["User-Agent": "pan.baidu.com"], start: 12.5, directory: directory, copyVideo: false)
         XCTAssertTrue(jumped.contains("-ss"))
         XCTAssertTrue(jumped.contains("libx264"))
-        XCTAssertTrue(RemuxLaunch.playlistReady("#EXTINF:2.0,\nseg00000.ts"))
+        XCTAssertFalse(fromStart.contains("hvc1"))
+        XCTAssertTrue(fromStart.contains("fmp4"))
+        XCTAssertTrue(RemuxLaunch.playlistReady("#EXTINF:2.0,\nseg00000.m4s"))
         XCTAssertFalse(RemuxLaunch.playlistReady("#EXTM3U"))
+    }
+
+    func testLoopbackServesThePlaylist() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ep-loop-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "#EXTM3U\n#EXTINF:1.0,\nseg00000.m4s\n".write(to: root.appendingPathComponent("index.m3u8"), atomically: true, encoding: .utf8)
+        let server = LoopbackFileServer(root: root)
+        let base = try await server.start()
+        defer { server.stop() }
+        let (data, response) = try await URLSession.shared.data(from: base.appendingPathComponent("index.m3u8"))
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("EXTINF") == true)
+    }
+
+    @MainActor
+    func testMPVPlaysHEVCWithoutRemux() async throws {
+        let sample = "/tmp/ep-hevc.mp4"
+        try XCTSkipIf(!FileManager.default.fileExists(atPath: sample), "没有本地 HEVC 样本")
+        guard let kit = MPVPlayerKit() else {
+            throw XCTSkip("libmpv 不在应用程序支持目录")
+        }
+        try await kit.open(url: URL(fileURLWithPath: sample))
+        let duration = kit.duration
+        let hasVideo = kit.hasVideo
+        XCTAssertGreaterThan(duration, 1)
+        XCTAssertTrue(hasVideo)
+        kit.close()
     }
 }
 
@@ -327,8 +414,8 @@ final class NetdiskServiceTests: XCTestCase {
         let service = try makeNetdisk(http: http)
         let file = NetdiskFile(fsID: 2, path: "/show/a.mkv", name: "a.mkv", isDirectory: false, size: 10, modified: nil)
         let plan = await service.preparePlayback(file)
-        guard case .remux(_, _, let url, let headers, _) = plan else {
-            return XCTFail("MKV 应该走边转边播，实际 \(plan)")
+        guard case .stream(_, _, let url, let headers, _) = plan else {
+            return XCTFail("MKV 应该直接在线播放，实际 \(plan)")
         }
         XCTAssertEqual(headers["User-Agent"], "pan.baidu.com")
         XCTAssertTrue(url.absoluteString.contains("access_token=token"))

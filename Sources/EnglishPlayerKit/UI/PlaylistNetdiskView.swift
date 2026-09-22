@@ -231,7 +231,7 @@ struct NetdiskScreen: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("连接百度网盘")
                 .font(.system(size: 20, weight: .semibold))
-            Text("常见格式可以直接在线播放。MKV 会边转换边播放，不必先下完整集。授权凭证只进钥匙串，不会上传你的学习记录。")
+            Text("常见格式可以直接在线播放，MKV 也直接播，不必先下完整集。授权凭证只进钥匙串，不会上传你的学习记录。")
                 .foregroundStyle(theme.text2)
                 .fixedSize(horizontal: false, vertical: true)
             Text(netdisk.rateLimitNotice)

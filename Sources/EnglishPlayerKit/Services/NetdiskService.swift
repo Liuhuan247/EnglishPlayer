@@ -27,7 +27,7 @@ final class NetdiskService: ObservableObject {
     var hasSecret: Bool { !secret.isEmpty }
     var secretValue: String { secret }
 
-    let rateLimitNotice = "非会员在线播放可能被限速。MKV 会边转边播，不用等整集下完；拖到还没转好的位置时会从那里重新开始。"
+    let rateLimitNotice = "非会员在线播放可能被限速。MKV 由 mpv 直接播放，不用等整集下完。"
 
     var onFileReady: ((String, String, String) -> Void)?
 
@@ -140,6 +140,17 @@ final class NetdiskService: ObservableObject {
         }
     }
 
+    func file(at path: String) async -> NetdiskFile? {
+        let folder = NetdiskCatalog.parentDirectory(of: path)
+        do {
+            let token = try await validToken()
+            let listed = try await api.list(directory: folder, token: token)
+            return listed.first { $0.path == path && $0.isPlayable }
+        } catch {
+            return nil
+        }
+    }
+
     func preparePlayback(_ file: NetdiskFile) async -> NetdiskPlayPlan {
         guard file.isPlayable else {
             return .blocked("「\(file.name)」不是可播放的音视频。")
@@ -159,19 +170,9 @@ final class NetdiskService: ObservableObject {
         if let cached = cachedFileURL(for: file) {
             return .local(remotePath: file.path, title: file.name, cachePath: cached.path, subtitlePaths: subtitlePaths)
         }
-        let ext = URL(fileURLWithPath: file.name).pathExtension.lowercased()
         do {
             let link = try await playbackLink(for: file)
-            if MediaKind.systemNative.contains(ext) {
-                return .stream(
-                    remotePath: file.path,
-                    title: file.name,
-                    url: link.url,
-                    headers: link.headers,
-                    subtitlePaths: subtitlePaths
-                )
-            }
-            return .remux(
+            return .stream(
                 remotePath: file.path,
                 title: file.name,
                 url: link.url,

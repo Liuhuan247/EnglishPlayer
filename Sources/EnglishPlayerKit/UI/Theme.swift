@@ -117,26 +117,38 @@ struct IconButton: View {
     var help: String
     var active = false
     var prominent = false
+    var loading = false
     var action: () -> Void
 
     @Environment(\.theme) private var theme
     @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: prominent ? 15 : 13, weight: .semibold))
-                .frame(width: prominent ? 40 : 34, height: prominent ? 34 : 30)
-                .foregroundStyle(prominent ? Color.white : (active ? theme.accent : theme.icon))
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(prominent ? theme.accent : (active ? theme.accentSoft : (hovering ? theme.sidebar : Color.clear)))
-                )
-                .overlay(alignment: .bottom) {
-                    if active && !prominent {
-                        Capsule().fill(theme.accent).frame(width: 12, height: 2).offset(y: -2)
-                    }
+        Button {
+            guard !loading else { return }
+            action()
+        } label: {
+            Group {
+                if loading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(prominent ? .white : theme.icon)
+                } else {
+                    Image(systemName: systemName)
+                        .font(.system(size: prominent ? 15 : 13, weight: .semibold))
                 }
+            }
+            .frame(width: prominent ? 40 : 34, height: prominent ? 34 : 30)
+            .foregroundStyle(prominent ? Color.white : (active ? theme.accent : theme.icon))
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(prominent ? theme.accent : (active ? theme.accentSoft : (hovering ? theme.sidebar : Color.clear)))
+            )
+            .overlay(alignment: .bottom) {
+                if active && !prominent {
+                    Capsule().fill(theme.accent).frame(width: 12, height: 2).offset(y: -2)
+                }
+            }
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -259,7 +271,7 @@ struct WordLine: View {
                     .font(.system(size: fontSize, weight: weight))
                     .foregroundStyle(color)
                     .captionOutline(outlined)
-                    .onTapGesture(count: 2) { onLookup(word) }
+                    .onTapGesture { onLookup(word) }
                     .contextMenu {
                         Button("在欧陆词典中查询") { onLookup(word) }
                     }

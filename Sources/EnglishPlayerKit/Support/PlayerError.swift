@@ -17,6 +17,7 @@ enum PlayerError: LocalizedError, Equatable {
     case database(String)
     case featureUnavailable(String)
     case streamUnsupported(String)
+    case remuxFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -51,6 +52,8 @@ enum PlayerError: LocalizedError, Equatable {
             return reason
         case .streamUnsupported(let name):
             return "「\(name)」不能在线播放。可以先下载，下载完成后从缓存播放。"
+        case .remuxFailed(let name):
+            return "在线转换没有播出来：「\(name)」。请再点一次播放。"
         }
     }
 }

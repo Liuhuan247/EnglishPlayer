@@ -95,6 +95,20 @@ final class LibraryService: ObservableObject {
         try? store.replaceSentences(mediaID: mediaID, sentences)
     }
 
+    func sentences(mediaID: String) -> [Sentence] {
+        (try? store.sentences(mediaID: mediaID)) ?? []
+    }
+
+    func recentMedia(limit: Int = 6) -> [MediaItem] {
+        let all = (try? store.allMedia()) ?? []
+        return all.filter { item in
+            if item.source == .local {
+                return FileManager.default.fileExists(atPath: item.path)
+            }
+            return true
+        }.prefix(limit).map { $0 }
+    }
+
     func removeFromPlaylist(at index: Int) {
         guard playlist.indices.contains(index) else { return }
         playlist.remove(at: index)

@@ -152,11 +152,17 @@ struct NetdiskAPI {
     func fileMeta(fsID: Int64, token: String) async throws -> RemoteMeta {
         let url = try Self.url("https://pan.baidu.com/rest/2.0/xpan/multimedia", [
             URLQueryItem(name: "method", value: "filemetas"),
-            URLQueryItem(name: "fsids", value: "[\(fsID)]"),
-            URLQueryItem(name: "dlink", value: "1"),
-            URLQueryItem(name: "access_token", value: token)
+            URLQueryItem(name: "access_token", value: token),
+            URLQueryItem(name: "dlink", value: "1")
         ])
-        let json = try await jsonObject(url)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        // 方括号放在查询串里时，百度经常直接回 HTTP 500。
+        var body = URLComponents()
+        body.queryItems = [URLQueryItem(name: "fsids", value: "[\(fsID)]")]
+        request.httpBody = Data((body.percentEncodedQuery ?? "fsids=[\(fsID)]").utf8)
+        let json = try await jsonObject(request)
         try Self.checkErrno(json)
         let list = json["list"] as? [[String: Any]] ?? []
         guard let first = list.first, let dlink = first["dlink"] as? String, !dlink.isEmpty else {
@@ -234,8 +240,15 @@ struct NetdiskAPI {
     }
 
     private func jsonObject(_ url: URL, allowHTTPError: Bool = false) async throws -> [String: Any] {
-        var request = URLRequest(url: url)
-        request.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
+        let request = URLRequest(url: url)
+        return try await jsonObject(request, allowHTTPError: allowHTTPError)
+    }
+
+    private func jsonObject(_ request: URLRequest, allowHTTPError: Bool = false) async throws -> [String: Any] {
+        var request = request
+        if request.value(forHTTPHeaderField: "User-Agent") == nil {
+            request.setValue("pan.baidu.com", forHTTPHeaderField: "User-Agent")
+        }
         let response = try await http.send(request)
         if !allowHTTPError, !(200...299).contains(response.status) {
             throw PlayerError.network("HTTP \(response.status)")

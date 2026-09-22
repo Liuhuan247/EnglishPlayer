@@ -12,6 +12,8 @@ final class PlaybackSession: ObservableObject {
     @Published var rate: Double = 1
     @Published var volume: Float = 1
     @Published var loopMode: LoopMode = .off
+    @Published var abStart: Double?
+    @Published var abEnd: Double?
     @Published var subtitleMode: SubtitleMode = .bilingual
     @Published var fontSize: Double = 23
     @Published var offset: Double = 0
@@ -21,6 +23,11 @@ final class PlaybackSession: ObservableObject {
     @Published var statusText = "拖入或打开英语视频、音频，开始逐句精听"
     @Published var banner: String?
     @Published var hasVideo = false
+    @Published var isLoading = false
+    @Published var isBuffering = false
+    @Published var isReadingEmbeddedSubtitles = false
+
+    var showsLoading: Bool { isLoading || isBuffering }
 
     var onFinished: (() -> Void)?
     let core: MediaCoreProtocol
@@ -32,6 +39,8 @@ final class PlaybackSession: ObservableObject {
     private var seekStarted = Date.distantPast
     private var didFinish = false
     private var waveformTask: Task<Void, Never>?
+    private var subtitleTask: Task<Void, Never>?
+    private var subtitleGeneration = 0
     private var lastPersist = Date.distantPast
 
     init(core: MediaCoreProtocol, library: LibraryService, waveforms: WaveformService) {
@@ -53,6 +62,11 @@ final class PlaybackSession: ObservableObject {
                 self?.handleTick(time)
             }
         }
+        core.setBufferingObserver { [weak self] buffering in
+            Task { @MainActor in
+                self?.isBuffering = buffering
+            }
+        }
     }
 
     var currentSentence: Sentence? { engine.current }
@@ -63,42 +77,55 @@ final class PlaybackSession: ObservableObject {
             statusText = banner ?? ""
             return
         }
-        await present(item, autoplay: autoplay) {
+        await present(item, autoplay: autoplay, mediaURL: url) {
             try await self.core.open(url: url)
         }
     }
 
     func openRemote(_ item: MediaItem, url: URL, headers: [String: String], autoplay: Bool) async {
-        await present(item, autoplay: autoplay) {
+        await present(item, autoplay: autoplay, mediaURL: url, headers: headers) {
             try await self.core.openRemote(url: url, headers: headers)
         }
     }
 
     func openRemux(_ item: MediaItem, url: URL, headers: [String: String], autoplay: Bool) async {
-        await present(item, autoplay: autoplay) {
+        await present(item, autoplay: autoplay, mediaURL: url, headers: headers) {
             try await self.core.openRemux(url: url, headers: headers)
         }
     }
 
-    private func present(_ item: MediaItem, autoplay: Bool, loader: () async throws -> Void) async {
+    private func present(_ item: MediaItem, autoplay: Bool, mediaURL: URL, headers: [String: String] = [:], loader: () async throws -> Void) async {
         persist()
         waveformTask?.cancel()
+        subtitleTask?.cancel()
+        subtitleGeneration += 1
+        let generation = subtitleGeneration
+        isReadingEmbeddedSubtitles = false
         banner = nil
+        seekTarget = nil
+        isLoading = true
+        isBuffering = false
+        defer { isLoading = false }
         do {
             try await loader()
         } catch let error as PlayerError {
-            if case .streamUnsupported = error {
+            switch error {
+            case .streamUnsupported:
                 banner = PlayerError.streamUnsupported(item.title).errorDescription
-            } else {
+            case .remuxFailed:
+                banner = PlayerError.remuxFailed(item.title).errorDescription
+            default:
                 banner = error.errorDescription
             }
             statusText = banner ?? ""
             isPlaying = false
+            isBuffering = false
             return
         } catch {
             banner = (error as? LocalizedError)?.errorDescription ?? "无法播放这个文件。"
             statusText = banner ?? ""
             isPlaying = false
+            isBuffering = false
             return
         }
 
@@ -112,18 +139,50 @@ final class PlaybackSession: ObservableObject {
             localPath: item.cachePath ?? item.path,
             explicitRefs: item.subtitleRefs
         )
-        let tagged = tag(loaded.sentences, mediaID: item.id)
-        library.replaceSentences(mediaID: item.id, tagged)
-        if !loaded.refs.isEmpty {
-            fresh.subtitleRefs = loaded.refs
+        let cached = loaded.sentences.isEmpty ? library.sentences(mediaID: item.id) : []
+        let initial: [Sentence]
+        if !loaded.sentences.isEmpty {
+            initial = loaded.sentences
+            banner = loaded.warning
+        } else if !cached.isEmpty {
+            initial = cached
+        } else if canReadEmbeddedSubtitles(item) {
+            initial = []
+            isReadingEmbeddedSubtitles = true
+            banner = "正在读取片内字幕…"
+            subtitleTask = Task { [weak self] in
+                let result = await EmbeddedSubtitles.extract(url: mediaURL, headers: headers)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard let self, self.subtitleGeneration == generation else { return }
+                    self.isReadingEmbeddedSubtitles = false
+                    if result.sentences.isEmpty {
+                        self.banner = result.warning ?? "没有读到可按句播放的文字字幕。"
+                        self.statusText = self.statusLine()
+                        return
+                    }
+                    self.install(result.sentences, mediaID: item.id)
+                    self.banner = "已读取片内字幕，共 \(result.sentences.count) 句"
+                    self.statusText = self.statusLine()
+                }
+            }
+        } else {
+            initial = []
+            banner = loaded.warning
         }
-        engine.load(tagged)
-        sentences = tagged
-        currentIndex = 0
+        if !initial.isEmpty {
+            install(initial, mediaID: item.id)
+            if !loaded.refs.isEmpty {
+                fresh.subtitleRefs = loaded.refs
+            }
+        } else {
+            engine.load([])
+            sentences = []
+            currentIndex = 0
+        }
         loopMode = .off
         offset = fresh.subtitleOffset
         didFinish = false
-        banner = loaded.warning
 
         let resume = library.settings.autoResume ? fresh.lastPosition : 0
         if resume > 0.4, resume < duration - 0.4 {
@@ -258,15 +317,55 @@ final class PlaybackSession: ObservableObject {
             engine.abEnd = nil
         }
         statusText = statusLine()
+        publishLoop()
         return loopMode == .sentence ? "单句循环：开" : "单句循环：关"
     }
 
     func cycleAB() -> String {
         engine.loopMode = loopMode
         let message = engine.cycleAB(at: currentTime)
-        loopMode = engine.loopMode
+        publishLoop()
         statusText = statusLine()
         return message
+    }
+
+    /// 拖动进度条上的 A / B 点。两点都在时保持循环，并把颠倒的两端换回来。
+    func moveLoopBound(isStart: Bool, to fraction: Double) {
+        guard duration > 0 else { return }
+        let time = min(duration, max(0, fraction * duration))
+        if isStart {
+            engine.abStart = time
+        } else {
+            engine.abEnd = time
+        }
+        if let start = engine.abStart, let end = engine.abEnd, end < start {
+            engine.abStart = end
+            engine.abEnd = start
+        }
+        if let start = engine.abStart, let end = engine.abEnd, end - start < 0.2 {
+            if isStart {
+                engine.abStart = max(0, end - 0.2)
+            } else {
+                engine.abEnd = min(duration, start + 0.2)
+            }
+        }
+        if engine.abStart != nil, engine.abEnd != nil {
+            engine.loopMode = .ab
+        }
+        publishLoop()
+        statusText = statusLine()
+    }
+
+    func nudgeOffset(by delta: Double) {
+        let stepped = (offset + delta) * 10
+        let rounded = stepped.rounded() / 10
+        setOffset(min(5, max(-5, rounded)))
+    }
+
+    private func publishLoop() {
+        abStart = engine.abStart
+        abEnd = engine.abEnd
+        loopMode = engine.loopMode
     }
 
     func setSubtitleMode(_ mode: SubtitleMode) {
@@ -304,6 +403,15 @@ final class PlaybackSession: ObservableObject {
         library.setPreservePitch(enabled)
     }
 
+    /// 主窗口关掉时先记下进度再暂停，避免窗口没了声音还在放。
+    func suspendForClose() {
+        persist()
+        core.pause()
+        isPlaying = false
+        isLoading = false
+        isBuffering = false
+    }
+
     func persist() {
         guard var item = currentItem else { return }
         let position = currentTime
@@ -319,13 +427,14 @@ final class PlaybackSession: ObservableObject {
     }
 
     func handleTick(_ time: Double) {
-        currentTime = time
         if let target = seekTarget {
-            let arrived = abs(time - target) < 0.12
-            let timedOut = Date().timeIntervalSince(seekStarted) > 1.2
+            let arrived = abs(time - target) < 0.35
+            let timedOut = Date().timeIntervalSince(seekStarted) > 8
             if !arrived && !timedOut { return }
             seekTarget = nil
+            isLoading = false
         }
+        currentTime = time
         guard currentItem != nil else { return }
         switch engine.action(at: time, offset: offset) {
         case .follow(let index, let fraction):
@@ -364,6 +473,7 @@ final class PlaybackSession: ObservableObject {
         seekTarget = target
         seekStarted = Date()
         didFinish = false
+        isLoading = true
         currentTime = target
         Task { await self.core.seek(to: target) }
     }
@@ -452,6 +562,22 @@ final class PlaybackSession: ObservableObject {
         }
         let position = TimeFormat.clock(currentTime)
         return "\(subtitle) · \(source) · 断点 \(position) · \(PlaybackRate.display(rate)) · \(loop)"
+    }
+
+    private func canReadEmbeddedSubtitles(_ item: MediaItem) -> Bool {
+        let ext = URL(fileURLWithPath: item.path).pathExtension.lowercased()
+        return ["mkv", "mp4", "mov", "m4v", "webm", "avi"].contains(ext)
+    }
+
+    private func install(_ sentences: [Sentence], mediaID: String) {
+        let tagged = tag(sentences, mediaID: mediaID)
+        library.replaceSentences(mediaID: mediaID, tagged)
+        engine.load(tagged)
+        self.sentences = tagged
+        currentIndex = engine.containingIndex(at: currentTime, offset: offset) ?? 0
+        _ = engine.select(index: currentIndex)
+        publishLoop()
+        refreshWaveform()
     }
 
     private func tag(_ sentences: [Sentence], mediaID: String) -> [Sentence] {

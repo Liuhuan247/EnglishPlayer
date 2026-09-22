@@ -1,8 +1,9 @@
+import Darwin
 import Foundation
 
 /// 把网盘上 AVPlayer 打不开的封装边读边转成 HLS。视频尽量原样复制，只把音轨转成 AAC。
 enum RemuxLaunch {
-    static func arguments(source: URL, headers: [String: String], start: Double, directory: URL, copyVideo: Bool) -> [String] {
+    static func arguments(source: URL, headers: [String: String], start: Double, directory: URL, copyVideo: Bool, videoTag: String? = nil) -> [String] {
         var args = ["-hide_banner", "-loglevel", "warning", "-nostdin"]
         let agent = headers["User-Agent"] ?? "pan.baidu.com"
         args += ["-user_agent", agent]
@@ -17,6 +18,9 @@ enum RemuxLaunch {
         args += ["-i", source.absoluteString, "-map", "0:v:0?", "-map", "0:a:0?"]
         if copyVideo {
             args += ["-c:v", "copy"]
+            if let videoTag {
+                args += ["-tag:v", videoTag]
+            }
         } else {
             args += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p"]
         }
@@ -26,8 +30,10 @@ enum RemuxLaunch {
             "-hls_time", "2",
             "-hls_list_size", "0",
             "-hls_playlist_type", "event",
+            "-hls_segment_type", "fmp4",
+            "-hls_fmp4_init_filename", "init.mp4",
             "-hls_flags", "independent_segments+append_list",
-            "-hls_segment_filename", directory.appendingPathComponent("seg%05d.ts").path,
+            "-hls_segment_filename", directory.appendingPathComponent("seg%05d.m4s").path,
             directory.appendingPathComponent("index.m3u8").path
         ]
         return args
@@ -46,6 +52,11 @@ final class LiveRemuxSession: @unchecked Sendable {
     var onDuration: ((Double) -> Void)?
     private var process: Process?
     private var logHandle: FileHandle?
+    private var slaveHandle: FileHandle?
+    private var logReader: FileHandle?
+    private let logLock = NSLock()
+    private var hevcTagNeeded = false
+    private(set) var lastVideoTag: String?
     private var generation = 0
     private let root: URL
 
@@ -58,7 +69,7 @@ final class LiveRemuxSession: @unchecked Sendable {
         root = base.appendingPathComponent("EnglishPlayer/remux/\(digest)", isDirectory: true)
     }
 
-    func start(at seconds: Double) async throws -> URL {
+    func start(at seconds: Double, forceVideoTag: String? = nil) async throws -> URL {
         guard let ffmpeg = MediaCompat.locateFFmpeg() else {
             throw PlayerError.featureUnavailable("需要 ffmpeg 才能在线播放这种封装。把 ffmpeg 放到「应用程序支持/EnglishPlayer/bin」后重试。")
         }
@@ -79,21 +90,70 @@ final class LiveRemuxSession: @unchecked Sendable {
         }
 
         let playlist = directory.appendingPathComponent("index.m3u8")
+        resetHEVCFlag()
         let ready: URL?
-        if let first = try await run(ffmpeg, directory: directory, playlist: playlist, start: seconds, copyVideo: true, token: token) {
-            ready = first
+        if let forceVideoTag {
+            ready = try await run(ffmpeg, directory: directory, playlist: playlist, start: seconds, copyVideo: true, videoTag: forceVideoTag, token: token)
+        } else if let first = try await run(ffmpeg, directory: directory, playlist: playlist, start: seconds, copyVideo: true, videoTag: nil, token: token) {
+            if Self.initSegmentNeedsHVC1(directory) || needsHEVCTag() || Self.logNeedsHEVCTag(directory) {
+                stopProcess()
+                ready = try await run(ffmpeg, directory: directory, playlist: playlist, start: seconds, copyVideo: true, videoTag: "hvc1", token: token)
+            } else {
+                ready = first
+            }
         } else {
             ready = try await secondPass(ffmpeg, directory: directory, playlist: playlist, start: seconds, token: token)
         }
         guard let ready else {
-            throw PlayerError.streamUnsupported(source.lastPathComponent)
+            throw PlayerError.remuxFailed(source.lastPathComponent)
         }
         return ready
     }
 
     private func secondPass(_ ffmpeg: URL, directory: URL, playlist: URL, start: Double, token: Int) async throws -> URL? {
         if token != generation { throw CancellationError() }
-        return try await run(ffmpeg, directory: directory, playlist: playlist, start: start, copyVideo: false, token: token)
+        return try await run(ffmpeg, directory: directory, playlist: playlist, start: start, copyVideo: false, videoTag: nil, token: token)
+    }
+
+    private func resetHEVCFlag() {
+        logLock.lock()
+        hevcTagNeeded = false
+        logLock.unlock()
+    }
+
+    private func needsHEVCTag() -> Bool {
+        logLock.lock()
+        defer { logLock.unlock() }
+        return hevcTagNeeded
+    }
+
+    private static func logNeedsHEVCTag(_ directory: URL) -> Bool {
+        let log = directory.appendingPathComponent("ffmpeg.log")
+        let text = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+        return text.contains("not hvc1")
+    }
+
+    /// MPEG-TS 里的 HEVC 系统播放器不认。要先打成 fMP4，并且标记成 hvc1。
+    private static func initSegmentNeedsHVC1(_ directory: URL) -> Bool {
+        let file = directory.appendingPathComponent("init.mp4")
+        guard FileManager.default.fileExists(atPath: file.path), let ffmpeg = MediaCompat.locateFFmpeg() else {
+            return false
+        }
+        let process = Process()
+        process.executableURL = ffmpeg
+        process.arguments = ["-hide_banner", "-i", file.path]
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+        do {
+            try process.run()
+        } catch {
+            return false
+        }
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return text.contains("Video: hevc") && !text.contains("hvc1")
     }
 
     func stop() {
@@ -108,14 +168,13 @@ final class LiveRemuxSession: @unchecked Sendable {
         onDuration?(value)
     }
 
-    private func run(_ ffmpeg: URL, directory: URL, playlist: URL, start: Double, copyVideo: Bool, token: Int) async throws -> URL? {
-        if !copyVideo {
+    private func run(_ ffmpeg: URL, directory: URL, playlist: URL, start: Double, copyVideo: Bool, videoTag: String?, token: Int) async throws -> URL? {
+        if !copyVideo || videoTag != nil {
             try? FileManager.default.removeItem(at: directory)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
         let log = directory.appendingPathComponent("ffmpeg.log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: log)
         let process = Process()
         process.executableURL = ffmpeg
         process.arguments = RemuxLaunch.arguments(
@@ -123,16 +182,19 @@ final class LiveRemuxSession: @unchecked Sendable {
             headers: headers,
             start: start,
             directory: directory,
-            copyVideo: copyVideo
+            copyVideo: copyVideo,
+            videoTag: videoTag
         )
-        process.standardOutput = handle
-        process.standardError = handle
+        let handle = try attachLog(log, process: process)
+        lastVideoTag = videoTag
         do {
             try process.run()
         } catch {
-            try? handle.close()
+            stopProcess()
             return nil
         }
+        try? slaveHandle?.close()
+        slaveHandle = nil
         self.process = process
         self.logHandle = handle
         let deadline = Date().addingTimeInterval(25)
@@ -144,9 +206,7 @@ final class LiveRemuxSession: @unchecked Sendable {
                 return playlist
             }
             if !process.isRunning {
-                try? logHandle?.close()
-                logHandle = nil
-                self.process = nil
+                stopProcess()
                 return nil
             }
             try await Task.sleep(nanoseconds: 200_000_000)
@@ -211,15 +271,57 @@ final class LiveRemuxSession: @unchecked Sendable {
         return value
     }
 
+    /// ffmpeg 把日志写到文件时会整块缓冲，「not hvc1」要等进程退出才落盘。
+    /// 接到伪终端上才会一行一行出来，这样才能在交给播放器之前改成 hvc1。
+    private func attachLog(_ log: URL, process: Process) throws -> FileHandle? {
+        var masterFD: Int32 = -1
+        var slaveFD: Int32 = -1
+        guard openpty(&masterFD, &slaveFD, nil, nil, nil) == 0 else {
+            let handle = try FileHandle(forWritingTo: log)
+            process.standardOutput = handle
+            process.standardError = handle
+            return handle
+        }
+        let slave = FileHandle(fileDescriptor: slaveFD, closeOnDealloc: false)
+        process.standardOutput = slave
+        process.standardError = slave
+        slaveHandle = slave
+        let master = FileHandle(fileDescriptor: masterFD, closeOnDealloc: false)
+        logReader = master
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            while true {
+                let data = master.availableData
+                if data.isEmpty { break }
+                self?.appendLog(data, to: log)
+            }
+            try? master.close()
+        }
+        return nil
+    }
+
+    private func appendLog(_ data: Data, to url: URL) {
+        logLock.lock()
+        defer { logLock.unlock() }
+        if let text = String(data: data, encoding: .utf8), text.contains("not hvc1") {
+            hevcTagNeeded = true
+        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        handle.seekToEndOfFile()
+        handle.write(data)
+        try? handle.close()
+    }
+
     private func stopProcess() {
+        if let process, process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        self.process = nil
+        try? slaveHandle?.close()
+        slaveHandle = nil
+        try? logReader?.close()
+        logReader = nil
         try? logHandle?.close()
         logHandle = nil
-        guard let process, process.isRunning else {
-            self.process = nil
-            return
-        }
-        process.terminate()
-        process.waitUntilExit()
-        self.process = nil
     }
 }

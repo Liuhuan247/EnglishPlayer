@@ -13,6 +13,7 @@ final class AVPlayerKit: MediaCoreProtocol {
     private weak var previewHost: NSView?
     private(set) var openedURL: URL?
     private var remux: LiveRemuxSession?
+    private var loopback: LoopbackFileServer?
     private let remuxClock = RemuxClock()
     private var remuxDuration: Double = 0
     var statusHandler: ((String) -> Void)?
@@ -76,12 +77,21 @@ final class AVPlayerKit: MediaCoreProtocol {
         statusHandler?("正在转换「\(url.lastPathComponent)」，马上就能播…")
         remux = session
         do {
-            let playlist = try await session.start(at: 0)
+            var playlist = try await session.start(at: 0)
             remuxClock.set(0)
             remuxDuration = session.probedDuration
-            guard await attachIfReady(playlist, readyTimeout: 20) else {
+            var playURL = try await publish(playlist)
+            var opened = await attachIfReady(playURL, readyTimeout: 20, openEnded: true)
+            if !opened, session.lastVideoTag == nil {
+                playlist = try await session.start(at: 0, forceVideoTag: "hvc1")
+                remuxClock.set(0)
+                remuxDuration = session.probedDuration
+                playURL = try await publish(playlist)
+                opened = await attachIfReady(playURL, readyTimeout: 20, openEnded: true)
+            }
+            guard opened else {
                 stopRemux()
-                throw PlayerError.streamUnsupported(url.lastPathComponent)
+                throw PlayerError.remuxFailed(url.lastPathComponent)
             }
             if remuxDuration > 0 {
                 duration = remuxDuration
@@ -93,7 +103,30 @@ final class AVPlayerKit: MediaCoreProtocol {
     }
 
     /// 音视频轨都能被系统解码时才直接播。MKV 里的杜比音轨经常在这里失败。
-    private func attachIfReady(_ url: URL, headers: [String: String] = [:], readyTimeout: TimeInterval = 2) async -> Bool {
+    /// 边转边播的 m3u8 还在增长，总时长经常是无限的，不能用本地文件那套时长门槛。
+    private func attachIfReady(_ url: URL, headers: [String: String] = [:], readyTimeout: TimeInterval = 2, openEnded: Bool = false) async -> Bool {
+        if openEnded {
+            let item = AVPlayerItem(url: url)
+            item.audioTimePitchAlgorithm = pitchPreservation ? .timeDomain : .varispeed
+            player.replaceCurrentItem(with: item)
+            guard await itemIsReady(item, timeout: readyTimeout) else {
+                player.replaceCurrentItem(with: nil)
+                return false
+            }
+            let videoTracks = (try? await item.asset.loadTracks(withMediaType: .video)) ?? []
+            hasVideo = !videoTracks.isEmpty
+            let seconds = item.duration.seconds
+            if seconds.isFinite, seconds > 0 {
+                duration = seconds
+            }
+            player.defaultRate = desiredRate
+            openedURL = url
+            if let host = previewHost {
+                attachPreview(to: host)
+            }
+            return true
+        }
+
         var options: [String: Any] = [AVURLAssetPreferPreciseDurationAndTimingKey: true]
         if !headers.isEmpty {
             options["AVURLAssetHTTPHeaderFieldsKey"] = headers
@@ -121,7 +154,9 @@ final class AVPlayerKit: MediaCoreProtocol {
         }
 
         hasVideo = !videoTracks.isEmpty
-        duration = seconds
+        if seconds.isFinite, seconds > 0 {
+            duration = seconds
+        }
         player.defaultRate = desiredRate
         openedURL = url
         if let host = previewHost {
@@ -193,7 +228,8 @@ final class AVPlayerKit: MediaCoreProtocol {
         do {
             let playlist = try await remux.start(at: target)
             remuxClock.set(target)
-            guard await attachIfReady(playlist, readyTimeout: 20) else { return }
+            let playURL = try await publish(playlist)
+            guard await attachIfReady(playURL, readyTimeout: 20, openEnded: true) else { return }
             if remuxDuration > 0 { duration = remuxDuration }
             if wasPlaying { play() }
         } catch {
@@ -258,7 +294,17 @@ final class AVPlayerKit: MediaCoreProtocol {
         hasVideo = false
     }
 
+    private func publish(_ playlist: URL) async throws -> URL {
+        loopback?.stop()
+        let server = LoopbackFileServer(root: playlist.deletingLastPathComponent())
+        let base = try await server.start()
+        loopback = server
+        return base.appendingPathComponent(playlist.lastPathComponent)
+    }
+
     private func stopRemux() {
+        loopback?.stop()
+        loopback = nil
         remux?.stop()
         remux = nil
         remuxClock.set(0)

@@ -7,6 +7,7 @@ public final class AppModel: ObservableObject {
     nonisolated public let objectWillChange = ObservableObjectPublisher()
     @Published public var section: AppSection = .player
     @Published public var toast: String?
+    @Published public var dictionaryAlert: String?
 
     let library: LibraryService
     let session: PlaybackSession
@@ -15,6 +16,7 @@ public final class AppModel: ObservableObject {
     let cache: CacheManager
 
     private var toastTask: Task<Void, Never>?
+    private var didClosePlayer = false
     private var keyMonitor: Any?
     private var didRestore = false
     private var cancellables: Set<AnyCancellable> = []
@@ -72,7 +74,7 @@ public final class AppModel: ObservableObject {
             fatalError("无法创建缓存目录")
         }
         let waveforms = WaveformService(directory: support.appendingPathComponent("Waveforms", isDirectory: true))
-        let session = PlaybackSession(core: AVPlayerKit(), library: library, waveforms: waveforms)
+        let session = PlaybackSession(core: MPVPlayerKit() ?? AVPlayerKit(), library: library, waveforms: waveforms)
         let netdisk = NetdiskService(store: store, cache: cache, credentials: KeychainStore())
         return AppModel(
             library: library,
@@ -93,6 +95,15 @@ public final class AppModel: ObservableObject {
             await session.open(item, autoplay: false)
         }
         await netdisk.restoreSession()
+    }
+
+    func playerWindowWillClose() {
+        guard !didClosePlayer else { return }
+        didClosePlayer = true
+        session.suspendForClose()
+        DispatchQueue.main.async {
+            NSApp.terminate(nil)
+        }
     }
 
     func showToast(_ text: String) {
@@ -193,6 +204,7 @@ public final class AppModel: ObservableObject {
         let hint = "正在准备「\(file.name)」…"
         netdisk.message = hint
         session.statusText = hint
+        session.isLoading = true
         showToast(hint)
         Task {
             switch await netdisk.preparePlayback(file) {
@@ -210,7 +222,7 @@ public final class AppModel: ObservableObject {
                 let item = library.upsertNetdisk(remotePath: remotePath, title: title, cachePath: nil, subtitleRefs: subtitlePaths)
                 await session.openRemux(item, url: url, headers: headers, autoplay: true)
                 if session.currentItem?.path == remotePath {
-                    showToast("正在边转边播「\(title)」")
+                    showToast("正在播放「\(title)」")
                 } else {
                     let text = session.banner ?? "无法在线播放「\(title)」"
                     netdisk.message = text
@@ -225,6 +237,8 @@ public final class AppModel: ObservableObject {
                     showToast(session.banner ?? "无法播放「\(title)」")
                 }
             case .blocked(let text):
+                session.isLoading = false
+                session.isBuffering = false
                 netdisk.message = text
                 showToast(text)
             }
@@ -283,9 +297,30 @@ public final class AppModel: ObservableObject {
         case .opened(let word):
             showToast("已唤起欧陆词典查询 \(word)")
         case .notInstalled:
-            showToast("未检测到欧陆词典。请先安装 Eudic，再双击单词查词。")
+            dictionaryAlert = "没有找到欧陆词典。请先安装并打开 Eudic，再点单词查词。"
         case .invalid:
-            showToast("这个词无法查询")
+            dictionaryAlert = "这个词无法查询。"
+        }
+    }
+
+    func playSaved(_ item: MediaItem) {
+        if item.source == .local {
+            guard FileManager.default.fileExists(atPath: item.path) else {
+                showToast("找不到「\(item.title)」")
+                return
+            }
+            Task { await session.open(item, autoplay: true) }
+            return
+        }
+        showToast("正在打开「\(item.title)」…")
+        Task {
+            if let file = await netdisk.file(at: item.path) {
+                playNetdisk(file)
+            } else if item.playableURL != nil {
+                await session.open(item, autoplay: true)
+            } else {
+                showToast("找不到网盘里的「\(item.title)」。请先登录百度网盘。")
+            }
         }
     }
 

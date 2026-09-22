@@ -14,6 +14,8 @@ protocol MediaCoreProtocol: AnyObject {
     /// 打开很慢时（例如把 MKV 转成系统能播的文件）用来更新状态栏。
     var statusHandler: ((String) -> Void)? { get set }
 
+    func setBufferingObserver(_ handler: @escaping (Bool) -> Void)
+
     func open(url: URL) async throws
     /// 网盘直链。失败时不转码，交给上层提示用户先下载。
     func openRemote(url: URL, headers: [String: String]) async throws
@@ -31,6 +33,8 @@ protocol MediaCoreProtocol: AnyObject {
 }
 
 extension MediaCoreProtocol {
+    func setBufferingObserver(_ handler: @escaping (Bool) -> Void) {}
+
     func openRemote(url: URL, headers: [String: String]) async throws {
         try await open(url: url)
     }

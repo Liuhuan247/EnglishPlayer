@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsScreen: View {
@@ -217,6 +218,46 @@ public struct SettingsWindow: View {
     }
 }
 
+/// 只监听播放器主窗口。关掉它时退出应用，网盘、播放列表和设置会一起关上，声音也会停。
+private struct PlayerWindowCloseMonitor: NSViewRepresentable {
+    var onClose: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = PlayerWindowCloseView()
+        view.onClose = onClose
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? PlayerWindowCloseView)?.onClose = onClose
+    }
+}
+
+private final class PlayerWindowCloseView: NSView {
+    var onClose: (() -> Void)?
+    private var observing: NSWindow?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard observing !== window else { return }
+        if let observing {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: observing)
+        }
+        observing = window
+        guard let window else { return }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillClose),
+            name: NSWindow.willCloseNotification,
+            object: window
+        )
+    }
+
+    @objc private func windowWillClose() {
+        onClose?()
+    }
+}
+
 public struct RootView: View {
     @Environment(\.colorScheme) private var systemScheme
     @EnvironmentObject private var model: AppModel
@@ -240,6 +281,7 @@ public struct RootView: View {
             .preferredColorScheme(model.library.settings.appearance.preferred)
             .overlay(alignment: .bottom) { toast }
             .onDrop(of: [.fileURL], isTargeted: nil, perform: model.acceptDrop)
+            .background(PlayerWindowCloseMonitor { model.playerWindowWillClose() })
             .task { await model.restoreIfNeeded() }
             .onReceive(model.session.$banner.compactMap { $0 }) { banner in
                 if !banner.isEmpty { model.showToast(banner) }
