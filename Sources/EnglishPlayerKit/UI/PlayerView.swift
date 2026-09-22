@@ -280,6 +280,18 @@ struct PlayerScreen: View {
                         .animation(.easeInOut(duration: 0.22), value: showChrome)
                 }
             }
+            if session.statusText.hasPrefix("正在") {
+                Text(session.statusText)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.horizontal, 28)
+                    .padding(.top, 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .trailing) { sentenceHandle }

@@ -190,7 +190,10 @@ public final class AppModel: ObservableObject {
     }
 
     func playNetdisk(_ file: NetdiskFile) {
-        netdisk.message = "正在连接「\(file.name)」…"
+        let hint = "正在准备「\(file.name)」…"
+        netdisk.message = hint
+        session.statusText = hint
+        showToast(hint)
         Task {
             switch await netdisk.preparePlayback(file) {
             case .stream(let remotePath, let title, let url, let headers, let subtitlePaths):
