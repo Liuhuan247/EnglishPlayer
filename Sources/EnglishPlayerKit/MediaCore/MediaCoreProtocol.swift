@@ -17,6 +17,8 @@ protocol MediaCoreProtocol: AnyObject {
     func open(url: URL) async throws
     /// 网盘直链。失败时不转码，交给上层提示用户先下载。
     func openRemote(url: URL, headers: [String: String]) async throws
+    /// 网盘上的 MKV 等封装：ffmpeg 边读边转成 HLS，播放器不用等整集下完。
+    func openRemux(url: URL, headers: [String: String]) async throws
     func play()
     func pause()
     func seek(to seconds: Double) async
@@ -31,6 +33,10 @@ protocol MediaCoreProtocol: AnyObject {
 extension MediaCoreProtocol {
     func openRemote(url: URL, headers: [String: String]) async throws {
         try await open(url: url)
+    }
+
+    func openRemux(url: URL, headers: [String: String]) async throws {
+        throw PlayerError.streamUnsupported(url.lastPathComponent)
     }
 }
 

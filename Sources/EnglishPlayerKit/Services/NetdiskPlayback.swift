@@ -38,6 +38,7 @@ enum NetdiskCatalog {
 
 enum NetdiskPlayPlan: Equatable {
     case stream(remotePath: String, title: String, url: URL, headers: [String: String], subtitlePaths: [String])
+    case remux(remotePath: String, title: String, url: URL, headers: [String: String], subtitlePaths: [String])
     case local(remotePath: String, title: String, cachePath: String, subtitlePaths: [String])
     case blocked(String)
 }

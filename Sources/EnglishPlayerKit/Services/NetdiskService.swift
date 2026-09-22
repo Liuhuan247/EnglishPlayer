@@ -27,7 +27,7 @@ final class NetdiskService: ObservableObject {
     var hasSecret: Bool { !secret.isEmpty }
     var secretValue: String { secret }
 
-    let rateLimitNotice = "非会员在线播放和下载都可能被限速。MP4、MOV 等常见格式可以直接播放；MKV 等封装需要先下载。"
+    let rateLimitNotice = "非会员在线播放可能被限速。MKV 会边转边播，不用等整集下完；拖到还没转好的位置时会从那里重新开始。"
 
     var onFileReady: ((String, String, String) -> Void)?
 
@@ -160,30 +160,40 @@ final class NetdiskService: ObservableObject {
             return .local(remotePath: file.path, title: file.name, cachePath: cached.path, subtitlePaths: subtitlePaths)
         }
         let ext = URL(fileURLWithPath: file.name).pathExtension.lowercased()
-        guard MediaKind.systemNative.contains(ext) else {
-            let shown = ext.isEmpty ? "这个封装" : ext.uppercased()
-            return .blocked("「\(file.name)」是 \(shown)，当前播放器不能在线播放。可以先下载，下载完成后从缓存播放。")
-        }
         do {
-            let meta = try await authorizedMeta(fsID: file.fsID)
-            guard let remote = URL(string: meta.dlink) else {
-                return .blocked("没有拿到「\(file.name)」的播放地址。")
+            let link = try await playbackLink(for: file)
+            if MediaKind.systemNative.contains(ext) {
+                return .stream(
+                    remotePath: file.path,
+                    title: file.name,
+                    url: link.url,
+                    headers: link.headers,
+                    subtitlePaths: subtitlePaths
+                )
             }
-            let token = try await validToken()
-            let request = DownloadRequest.make(url: remote, resumeFrom: 0, accessToken: token)
-            guard let streamURL = request.url else {
-                return .blocked("没有拿到「\(file.name)」的播放地址。")
-            }
-            return .stream(
+            return .remux(
                 remotePath: file.path,
                 title: file.name,
-                url: streamURL,
-                headers: ["User-Agent": "pan.baidu.com"],
+                url: link.url,
+                headers: link.headers,
                 subtitlePaths: subtitlePaths
             )
         } catch {
             return .blocked((error as? LocalizedError)?.errorDescription ?? "无法连接网盘文件")
         }
+    }
+
+    private func playbackLink(for file: NetdiskFile) async throws -> (url: URL, headers: [String: String]) {
+        let meta = try await authorizedMeta(fsID: file.fsID)
+        guard let remote = URL(string: meta.dlink) else {
+            throw PlayerError.network("没有拿到「\(file.name)」的播放地址。")
+        }
+        let token = try await validToken()
+        let request = DownloadRequest.make(url: remote, resumeFrom: 0, accessToken: token)
+        guard let streamURL = request.url else {
+            throw PlayerError.network("没有拿到「\(file.name)」的播放地址。")
+        }
+        return (streamURL, ["User-Agent": "pan.baidu.com"])
     }
 
     private func subtitlePaths(for mediaName: String, in files: [NetdiskFile]) async -> [String] {

@@ -279,6 +279,22 @@ final class SubtitleMatchTests: XCTestCase {
     }
 }
 
+final class RemuxLaunchTests: XCTestCase {
+    func testCopyVideoCommandSeeksOnlyWhenNeeded() {
+        let source = URL(string: "https://d.pcs.baidu.com/file/a.mkv?access_token=token")!
+        let directory = URL(fileURLWithPath: "/tmp/remux")
+        let fromStart = RemuxLaunch.arguments(source: source, headers: ["User-Agent": "pan.baidu.com"], start: 0, directory: directory, copyVideo: true)
+        XCTAssertFalse(fromStart.contains("-ss"))
+        XCTAssertTrue(fromStart.contains("copy"))
+        XCTAssertEqual(fromStart.last, "/tmp/remux/index.m3u8")
+        let jumped = RemuxLaunch.arguments(source: source, headers: ["User-Agent": "pan.baidu.com"], start: 12.5, directory: directory, copyVideo: false)
+        XCTAssertTrue(jumped.contains("-ss"))
+        XCTAssertTrue(jumped.contains("libx264"))
+        XCTAssertTrue(RemuxLaunch.playlistReady("#EXTINF:2.0,\nseg00000.ts"))
+        XCTAssertFalse(RemuxLaunch.playlistReady("#EXTM3U"))
+    }
+}
+
 final class DownloadLogicTests: XCTestCase {
     func testRangeHeaderAndDlinkRefresh() throws {
         let url = URL(string: "https://example.com/file?foo=1")!
@@ -311,10 +327,11 @@ final class NetdiskServiceTests: XCTestCase {
         let service = try makeNetdisk(http: http)
         let file = NetdiskFile(fsID: 2, path: "/show/a.mkv", name: "a.mkv", isDirectory: false, size: 10, modified: nil)
         let plan = await service.preparePlayback(file)
-        guard case .blocked(let text) = plan else {
-            return XCTFail("MKV 应该提示下载，实际 \(plan)")
+        guard case .remux(_, _, let url, let headers, _) = plan else {
+            return XCTFail("MKV 应该走边转边播，实际 \(plan)")
         }
-        XCTAssertTrue(text.contains("MKV"))
+        XCTAssertEqual(headers["User-Agent"], "pan.baidu.com")
+        XCTAssertTrue(url.absoluteString.contains("access_token=token"))
         XCTAssertEqual(service.playbackDirectory, "/show")
         XCTAssertEqual(service.playbackQueue.map(\.name), ["a.mkv", "b.mp4"])
     }

@@ -74,6 +74,12 @@ final class PlaybackSession: ObservableObject {
         }
     }
 
+    func openRemux(_ item: MediaItem, url: URL, headers: [String: String], autoplay: Bool) async {
+        await present(item, autoplay: autoplay) {
+            try await self.core.openRemux(url: url, headers: headers)
+        }
+    }
+
     private func present(_ item: MediaItem, autoplay: Bool, loader: () async throws -> Void) async {
         persist()
         waveformTask?.cancel()
@@ -371,6 +377,11 @@ final class PlaybackSession: ObservableObject {
         guard let url = core.openedURL ?? item.playableURL else {
             waveform = []
             waveformNote = sentences.isEmpty ? "加载字幕后会显示当前句波形" : nil
+            return
+        }
+        if url.pathExtension.lowercased() == "m3u8" {
+            waveform = []
+            waveformNote = "边转边播时暂不生成波形"
             return
         }
         if !url.isFileURL {

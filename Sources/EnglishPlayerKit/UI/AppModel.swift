@@ -203,6 +203,16 @@ public final class AppModel: ObservableObject {
                     netdisk.message = text
                     showToast(text)
                 }
+            case .remux(let remotePath, let title, let url, let headers, let subtitlePaths):
+                let item = library.upsertNetdisk(remotePath: remotePath, title: title, cachePath: nil, subtitleRefs: subtitlePaths)
+                await session.openRemux(item, url: url, headers: headers, autoplay: true)
+                if session.currentItem?.path == remotePath {
+                    showToast("正在边转边播「\(title)」")
+                } else {
+                    let text = session.banner ?? "无法在线播放「\(title)」"
+                    netdisk.message = text
+                    showToast(text)
+                }
             case .local(let remotePath, let title, let cachePath, let subtitlePaths):
                 let item = library.upsertNetdisk(remotePath: remotePath, title: title, cachePath: cachePath, subtitleRefs: subtitlePaths)
                 await session.open(item, autoplay: true)

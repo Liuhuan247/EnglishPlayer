@@ -12,6 +12,9 @@ final class AVPlayerKit: MediaCoreProtocol {
     private var previewLayer: AVPlayerLayer?
     private weak var previewHost: NSView?
     private(set) var openedURL: URL?
+    private var remux: LiveRemuxSession?
+    private let remuxClock = RemuxClock()
+    private var remuxDuration: Double = 0
     var statusHandler: ((String) -> Void)?
 
     private(set) var hasVideo = false
@@ -19,7 +22,8 @@ final class AVPlayerKit: MediaCoreProtocol {
 
     var currentTime: Double {
         let seconds = player.currentTime().seconds
-        return seconds.isFinite ? seconds : 0
+        let playerSeconds = seconds.isFinite ? seconds : 0
+        return remuxClock.current + playerSeconds
     }
 
     var isPlaying: Bool {
@@ -32,6 +36,7 @@ final class AVPlayerKit: MediaCoreProtocol {
     }
 
     func open(url: URL) async throws {
+        stopRemux()
         let ext = url.pathExtension.lowercased()
         guard MediaKind.isPlayable(url) else {
             throw PlayerError.unsupportedFormat(ext)
@@ -52,8 +57,38 @@ final class AVPlayerKit: MediaCoreProtocol {
     }
 
     func openRemote(url: URL, headers: [String: String]) async throws {
+        stopRemux()
         guard await attachIfReady(url, headers: headers, readyTimeout: 20) else {
             throw PlayerError.streamUnsupported(url.lastPathComponent)
+        }
+    }
+
+    func openRemux(url: URL, headers: [String: String]) async throws {
+        stopRemux()
+        let session = LiveRemuxSession(source: url, headers: headers)
+        session.onDuration = { [weak self] value in
+            Task { @MainActor in
+                guard let self, self.remux != nil else { return }
+                self.remuxDuration = value
+                self.duration = value
+            }
+        }
+        statusHandler?("正在转换「\(url.lastPathComponent)」，马上就能播…")
+        remux = session
+        do {
+            let playlist = try await session.start(at: 0)
+            remuxClock.set(0)
+            remuxDuration = session.probedDuration
+            guard await attachIfReady(playlist, readyTimeout: 20) else {
+                stopRemux()
+                throw PlayerError.streamUnsupported(url.lastPathComponent)
+            }
+            if remuxDuration > 0 {
+                duration = remuxDuration
+            }
+        } catch {
+            stopRemux()
+            throw error
         }
     }
 
@@ -129,10 +164,41 @@ final class AVPlayerKit: MediaCoreProtocol {
     }
 
     func seek(to seconds: Double) async {
+        if remux != nil {
+            await seekRemux(to: seconds)
+            return
+        }
         let upper = duration > 0 ? duration : seconds
         let clamped = min(max(0, seconds), upper)
         let time = CMTime(seconds: clamped, preferredTimescale: 600)
         await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    private func seekRemux(to seconds: Double) async {
+        guard let remux else { return }
+        let upper = remuxDuration > 0 ? remuxDuration : max(duration, seconds)
+        let target = min(max(0, seconds), upper)
+        let relative = target - remuxClock.current
+        let seekableEnd = player.currentItem?.seekableTimeRanges
+            .map(\.timeRangeValue)
+            .map { $0.start.seconds + $0.duration.seconds }
+            .max() ?? 0
+        if relative >= -0.05, seekableEnd > 0.2, relative <= seekableEnd - 0.3 {
+            let time = CMTime(seconds: max(0, relative), preferredTimescale: 600)
+            await player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            return
+        }
+        let wasPlaying = player.timeControlStatus == .playing || player.rate > 0
+        statusHandler?("正在转到 \(TimeFormat.clock(target))…")
+        do {
+            let playlist = try await remux.start(at: target)
+            remuxClock.set(target)
+            guard await attachIfReady(playlist, readyTimeout: 20) else { return }
+            if remuxDuration > 0 { duration = remuxDuration }
+            if wasPlaying { play() }
+        } catch {
+            statusHandler?((error as? LocalizedError)?.errorDescription ?? "无法跳到这个位置")
+        }
     }
 
     func setRate(_ rate: Double) {
@@ -153,10 +219,11 @@ final class AVPlayerKit: MediaCoreProtocol {
             player.removeTimeObserver(timeObserver)
         }
         let interval = CMTime(seconds: 0.05, preferredTimescale: 600)
-        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             let seconds = time.seconds
             guard seconds.isFinite else { return }
-            handler(seconds)
+            let origin = self?.remuxClock.current ?? 0
+            handler(origin + seconds)
         }
     }
 
@@ -183,11 +250,37 @@ final class AVPlayerKit: MediaCoreProtocol {
     }
 
     func close() {
+        stopRemux()
         player.pause()
         player.replaceCurrentItem(with: nil)
         openedURL = nil
         duration = 0
         hasVideo = false
+    }
+
+    private func stopRemux() {
+        remux?.stop()
+        remux = nil
+        remuxClock.set(0)
+        remuxDuration = 0
+    }
+}
+
+/// 边转边播的时间零点。播放器回调不在主线程隔离里，所以单独用锁保存。
+private final class RemuxClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var origin: Double = 0
+
+    var current: Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return origin
+    }
+
+    func set(_ value: Double) {
+        lock.lock()
+        origin = value
+        lock.unlock()
     }
 }
 
