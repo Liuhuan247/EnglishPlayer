@@ -7,7 +7,28 @@ protocol CredentialStoring: AnyObject {
     func remove(account: String) throws
 }
 
-/// 网盘 access_token / refresh_token / App Key 只进钥匙串，不写数据库、不写配置文件。
+/// 网盘登录信息写在 SQLite 里，打开软件时不再问系统密码。
+final class SQLiteCredentialStore: CredentialStoring {
+    private let store: SQLiteStore
+
+    init(store: SQLiteStore) {
+        self.store = store
+    }
+
+    func set(_ value: String, account: String) throws {
+        try store.setCredential(account: account, value: value)
+    }
+
+    func string(account: String) throws -> String? {
+        try store.credential(account: account)
+    }
+
+    func remove(account: String) throws {
+        try store.removeCredential(account: account)
+    }
+}
+
+/// 旧的钥匙串实现。正式启动不再使用，避免每次打开都要输入登录密码。
 final class KeychainStore: CredentialStoring {
     let service: String
     /// 同一次启动里每条凭据只读一次，避免连续弹多次。

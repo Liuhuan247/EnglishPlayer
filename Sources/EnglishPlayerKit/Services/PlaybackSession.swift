@@ -15,7 +15,7 @@ final class PlaybackSession: ObservableObject {
     @Published var abStart: Double?
     @Published var abEnd: Double?
     @Published var subtitleMode: SubtitleMode = .bilingual
-    @Published var fontSize: Double = 23
+    @Published var fontSize: Double = 42
     @Published var offset: Double = 0
     @Published var waveform: [Float] = []
     @Published var waveformFraction: Double = 0
@@ -42,6 +42,7 @@ final class PlaybackSession: ObservableObject {
     private var subtitleTask: Task<Void, Never>?
     private var subtitleGeneration = 0
     private var lastPersist = Date.distantPast
+    private var mediaHeaders: [String: String] = [:]
 
     init(core: MediaCoreProtocol, library: LibraryService, waveforms: WaveformService) {
         self.core = core
@@ -100,6 +101,7 @@ final class PlaybackSession: ObservableObject {
         subtitleTask?.cancel()
         subtitleGeneration += 1
         let generation = subtitleGeneration
+        mediaHeaders = headers
         isReadingEmbeddedSubtitles = false
         banner = nil
         seekTarget = nil
@@ -313,8 +315,7 @@ final class PlaybackSession: ObservableObject {
         } else {
             loopMode = .sentence
             engine.loopMode = .sentence
-            engine.abStart = nil
-            engine.abEnd = nil
+            engine.clearLoopBounds()
         }
         statusText = statusLine()
         publishLoop()
@@ -322,36 +323,17 @@ final class PlaybackSession: ObservableObject {
     }
 
     func cycleAB() -> String {
-        engine.loopMode = loopMode
-        let message = engine.cycleAB(at: currentTime)
+        let message = engine.cycleAB(at: currentTime, offset: offset)
         publishLoop()
         statusText = statusLine()
         return message
     }
 
-    /// 拖动进度条上的 A / B 点。两点都在时保持循环，并把颠倒的两端换回来。
+    /// 拖动进度条上的 A / B。两端都会吸到整句：A 是那一句的开头，B 是那一句的结尾。
     func moveLoopBound(isStart: Bool, to fraction: Double) {
         guard duration > 0 else { return }
         let time = min(duration, max(0, fraction * duration))
-        if isStart {
-            engine.abStart = time
-        } else {
-            engine.abEnd = time
-        }
-        if let start = engine.abStart, let end = engine.abEnd, end < start {
-            engine.abStart = end
-            engine.abEnd = start
-        }
-        if let start = engine.abStart, let end = engine.abEnd, end - start < 0.2 {
-            if isStart {
-                engine.abStart = max(0, end - 0.2)
-            } else {
-                engine.abEnd = min(duration, start + 0.2)
-            }
-        }
-        if engine.abStart != nil, engine.abEnd != nil {
-            engine.loopMode = .ab
-        }
+        guard engine.moveSentenceBound(isStart: isStart, at: time, offset: offset) else { return }
         publishLoop()
         statusText = statusLine()
     }
@@ -363,8 +345,9 @@ final class PlaybackSession: ObservableObject {
     }
 
     private func publishLoop() {
-        abStart = engine.abStart
-        abEnd = engine.abEnd
+        let bounds = engine.loopBounds(offset: offset)
+        abStart = bounds.start
+        abEnd = bounds.end
         loopMode = engine.loopMode
     }
 
@@ -376,7 +359,7 @@ final class PlaybackSession: ObservableObject {
     }
 
     func setFontSize(_ size: Double) {
-        let clamped = min(32, max(18, size))
+        let clamped = min(AppSettings.fontRange.upperBound, max(AppSettings.fontRange.lowerBound, size))
         fontSize = clamped
         library.setFontSize(clamped)
     }
@@ -390,6 +373,7 @@ final class PlaybackSession: ObservableObject {
         }
         library.setSubtitleOffset(seconds)
         refreshWaveform()
+        publishLoop()
     }
 
     func adjustVolume(by delta: Float) -> String {
@@ -489,16 +473,6 @@ final class PlaybackSession: ObservableObject {
             waveformNote = sentences.isEmpty ? "加载字幕后会显示当前句波形" : nil
             return
         }
-        if url.pathExtension.lowercased() == "m3u8" {
-            waveform = []
-            waveformNote = "边转边播时暂不生成波形"
-            return
-        }
-        if !url.isFileURL {
-            waveform = []
-            waveformNote = "在线播放暂不生成波形"
-            return
-        }
         let variant = String(Int((offset * 1000).rounded()))
         if let cached = waveforms.cachedPeaks(mediaID: item.id, index: sentence.index, variant: variant) {
             waveform = cached
@@ -510,6 +484,7 @@ final class PlaybackSession: ObservableObject {
         let index = sentence.index
         let start = sentence.startTime + offset
         let end = sentence.endTime + offset
+        let headers = mediaHeaders
         waveformTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -519,11 +494,14 @@ final class PlaybackSession: ObservableObject {
                     variant: variant,
                     url: url,
                     start: start,
-                    end: end
+                    end: end,
+                    headers: headers
                 )
                 guard !Task.isCancelled, self.currentIndex == index else { return }
                 self.waveform = peaks
                 self.waveformNote = nil
+            } catch is CancellationError {
+                return
             } catch PlayerError.noAudioTrack {
                 self.waveform = []
                 self.waveformNote = PlayerError.noAudioTrack.localizedDescription
@@ -558,7 +536,15 @@ final class PlaybackSession: ObservableObject {
         switch loopMode {
         case .off: loop = "循环关"
         case .sentence: loop = "单句循环"
-        case .ab: loop = "A-B 循环"
+        case .ab:
+            if let from = engine.abFrom, let to = engine.abTo,
+               sentences.indices.contains(from), sentences.indices.contains(to) {
+                let start = sentences[from].displayIndex
+                let end = sentences[to].displayIndex
+                loop = start == end ? "第 \(start) 句循环" : "第 \(start)–\(end) 句循环"
+            } else {
+                loop = "A-B 循环"
+            }
         }
         let position = TimeFormat.clock(currentTime)
         return "\(subtitle) · \(source) · 断点 \(position) · \(PlaybackRate.display(rate)) · \(loop)"

@@ -240,7 +240,11 @@ final class LibraryService: ObservableObject {
         if let raw = map["default_rate"], let number = Double(raw) { value.defaultRate = PlaybackRate.stepped(number) }
         if let raw = map["cache_limit"], let number = Int64(raw) { value.cacheLimitBytes = number }
         if let raw = map["subtitle_mode"], let mode = SubtitleMode(rawValue: raw) { value.subtitleMode = mode }
-        if let raw = map["font_size"], let number = Double(raw) { value.fontSize = number }
+        if let raw = map["font_size"], let number = Double(raw) {
+            // 旧版本最大只有 32。小于等于这个值的，按现在的默认字号抬上来。
+            let lifted = number <= 32 ? 42 : number
+            value.fontSize = min(AppSettings.fontRange.upperBound, max(AppSettings.fontRange.lowerBound, lifted))
+        }
         if let raw = map["preserve_pitch"] { value.preservePitch = raw != "0" }
         if let raw = map["auto_resume"] { value.autoResume = raw != "0" }
         if let raw = map["continuous_play"] { value.continuousPlay = raw != "0" }

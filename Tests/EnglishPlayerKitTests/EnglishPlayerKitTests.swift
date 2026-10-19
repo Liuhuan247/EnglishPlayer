@@ -146,15 +146,24 @@ final class SentenceEngineTests: XCTestCase {
         XCTAssertEqual(action, .seek(10, 0))
     }
 
-    func testABLoopSeeksToA() {
+    func testABLoopUsesWholeSentences() {
         var engine = SentenceEngine()
         engine.load([
-            Sentence(id: "a", mediaID: "m", index: 0, startTime: 0, endTime: 20, textEn: "Long", textZh: "")
+            Sentence(id: "a", mediaID: "m", index: 0, startTime: 0, endTime: 5, textEn: "One", textZh: ""),
+            Sentence(id: "b", mediaID: "m", index: 1, startTime: 5, endTime: 10, textEn: "Two", textZh: ""),
+            Sentence(id: "c", mediaID: "m", index: 2, startTime: 10, endTime: 15, textEn: "Three", textZh: "")
         ])
-        XCTAssertEqual(engine.cycleAB(at: 4), "A-B 循环：已设置起点 A")
-        XCTAssertEqual(engine.cycleAB(at: 9), "A-B 循环：开")
-        let action = engine.action(at: 8.99, offset: 0)
-        XCTAssertEqual(action, .seek(4, 0))
+        XCTAssertEqual(engine.cycleAB(at: 2, offset: 0), "A-B 循环：第 1 句为起点")
+        XCTAssertEqual(engine.loopBounds(offset: 0).start, 0)
+        XCTAssertNil(engine.loopBounds(offset: 0).end)
+        XCTAssertEqual(engine.cycleAB(at: 7, offset: 0), "A-B 循环：第 1–2 句")
+        XCTAssertEqual(engine.action(at: 9.98, offset: 0), .seek(0, 0))
+        XCTAssertEqual(engine.action(at: 10.48, offset: 0.5), .seek(0.5, 0))
+        XCTAssertTrue(engine.moveSentenceBound(isStart: false, at: 12, offset: 0))
+        XCTAssertEqual(engine.loopBounds(offset: 0).end, 15)
+        XCTAssertEqual(engine.cycleAB(at: 12, offset: 0), "A-B 循环：关")
+        XCTAssertEqual(engine.cycleAB(at: 1, offset: 0), "A-B 循环：第 1 句为起点")
+        XCTAssertEqual(engine.cycleAB(at: 1.2, offset: 0), "A-B 循环：第 1 句")
     }
 
     func testFollowsCurrentSentenceAndHighlightsFraction() {
@@ -263,6 +272,23 @@ final class LibraryServiceTests: XCTestCase {
         XCTAssertTrue(themed.settings.statusBarVisible)
         XCTAssertEqual(themed.playback(mediaID: library.playlist[0].id)?.position, 42)
         XCTAssertEqual(reopened.playlist.count, 1)
+    }
+
+    func testNetdiskCredentialsSurviveReopen() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).sqlite")
+        let store = try SQLiteStore(path: url.path)
+        let credentials = SQLiteCredentialStore(store: store)
+        try credentials.set("app", account: BaiduAccount.appKey)
+        try credentials.set("secret", account: BaiduAccount.secret)
+        try credentials.set("token", account: BaiduAccount.access)
+
+        let reopened = SQLiteCredentialStore(store: try SQLiteStore(path: url.path))
+        XCTAssertEqual(try reopened.string(account: BaiduAccount.appKey), "app")
+        XCTAssertEqual(try reopened.string(account: BaiduAccount.secret), "secret")
+        XCTAssertEqual(try reopened.string(account: BaiduAccount.access), "token")
+        try reopened.remove(account: BaiduAccount.access)
+        XCTAssertNil(try reopened.string(account: BaiduAccount.access))
+        XCTAssertEqual(try reopened.string(account: BaiduAccount.appKey), "app")
     }
 
     func testManualScrollPausesFollowUntilIdle() {
@@ -573,18 +599,29 @@ final class WaveformExtractorTests: XCTestCase {
         XCTAssertEqual(peaks.count, 16)
         XCTAssertGreaterThan(peaks.max() ?? 0, 0.2)
     }
+
+    func testPCM16BecomesNormalizedPeaks() {
+        var data = Data()
+        for _ in 0..<160 {
+            var sample = Int16(16000).littleEndian
+            withUnsafeBytes(of: &sample) { data.append(contentsOf: $0) }
+        }
+        let peaks = WaveformExtractor.peaks(from: WaveformExtractor.samples(fromPCM16: data), buckets: 8)
+        XCTAssertEqual(peaks.count, 8)
+        XCTAssertGreaterThan(peaks.max() ?? 0, 0.4)
+    }
 }
 
 private final class CountingExtractor: WaveformExtracting, @unchecked Sendable {
     var calls = 0
-    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int) async throws -> [Float] {
+    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int, headers: [String: String]) async throws -> [Float] {
         calls += 1
         return Array(repeating: 0.4, count: buckets)
     }
 }
 
 private struct FailingExtractor: WaveformExtracting {
-    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int) async throws -> [Float] {
+    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int, headers: [String: String]) async throws -> [Float] {
         throw PlayerError.noAudioTrack
     }
 }

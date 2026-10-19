@@ -27,13 +27,6 @@ struct EnglishPlayerApp: App {
         .defaultSize(width: 720, height: 640)
         .windowResizability(.contentMinSize)
 
-        Window("播放列表", id: "playlist") {
-            PlaylistWindow()
-                .environmentObject(model)
-        }
-        .defaultSize(width: 640, height: 560)
-        .windowResizability(.contentMinSize)
-
         Window("百度网盘", id: "netdisk") {
             NetdiskWindow()
                 .environmentObject(model)

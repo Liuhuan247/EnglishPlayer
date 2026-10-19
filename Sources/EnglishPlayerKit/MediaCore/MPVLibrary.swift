@@ -83,6 +83,11 @@ final class MPVLibrary {
     }
 
     static func locate() -> String? {
+        // 打包后的 .app 把依赖放在 Frameworks，和调试时放在「应用程序支持」的那份分开。
+        let inApp = Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/libmpv.dylib")
+        if FileManager.default.fileExists(atPath: inApp.path) {
+            return inApp.path
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         let bundled = base?.appendingPathComponent("EnglishPlayer/libmpv/libmpv.dylib").path
         if let bundled, FileManager.default.fileExists(atPath: bundled) {

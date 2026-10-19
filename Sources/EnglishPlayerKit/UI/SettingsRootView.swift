@@ -35,7 +35,7 @@ struct SettingsScreen: View {
                     }
                 }
                 group("字幕") {
-                    row("显示模式", detail: "双语 / 仅英文 / 仅中文 / 隐藏（盲听）") {
+                    row("画面字幕", detail: "只改视频下方。右侧句子列表始终显示双语") {
                         Picker("显示模式", selection: Binding(
                             get: { session.subtitleMode },
                             set: { session.setSubtitleMode($0) }
@@ -48,7 +48,7 @@ struct SettingsScreen: View {
                         .frame(width: 280)
                         .labelsHidden()
                     }
-                    row("字号", detail: "主字幕 18–32 pt") {
+                    row("字号", detail: "画面字幕 28–56 pt") {
                         HStack(spacing: 8) {
                             Button("−") { session.setFontSize(session.fontSize - 1) }
                             Text("\(Int(session.fontSize)) pt")
@@ -318,7 +318,7 @@ public struct PlayerCommands: Commands {
             Button("打开字幕…") { model.openSubtitlePanel() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
-            Button("播放列表") { openWindow(id: "playlist") }
+            Button("播放列表") { model.playlistOpen = true }
             Button("百度网盘") { openWindow(id: "netdisk") }
         }
         CommandGroup(replacing: .appSettings) {

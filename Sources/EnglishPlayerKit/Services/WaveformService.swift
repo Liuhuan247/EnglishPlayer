@@ -38,12 +38,13 @@ final class WaveformService {
         url: URL,
         start: Double,
         end: Double,
-        buckets: Int = 96
+        buckets: Int = 96,
+        headers: [String: String] = [:]
     ) async throws -> [Float] {
         if let cached = cachedPeaks(mediaID: mediaID, index: index, variant: variant) {
             return cached
         }
-        let extracted = try await extractor.extractPeaks(from: url, start: start, end: end, buckets: buckets)
+        let extracted = try await extractor.extractPeaks(from: url, start: start, end: end, buckets: buckets, headers: headers)
         store(extracted, mediaID: mediaID, index: index, variant: variant)
         return extracted
     }

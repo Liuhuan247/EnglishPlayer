@@ -7,6 +7,7 @@ struct PlaylistScreen: View {
     @EnvironmentObject private var library: LibraryService
     @EnvironmentObject private var session: PlaybackSession
     @EnvironmentObject private var netdisk: NetdiskService
+    var compact = false
 
     private var showingNetdisk: Bool {
         session.currentItem?.source == .netdisk && !netdisk.playbackQueue.isEmpty
@@ -100,9 +101,11 @@ struct PlaylistScreen: View {
                 Spacer()
                 Button("加入文件…") { model.openFilesPanel() }
                     .buttonStyle(.bordered)
-                Text("拖拽排序 · 自动续播断点")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(theme.text3)
+                if !compact {
+                    Text("拖拽排序 · 自动续播断点")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(theme.text3)
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)

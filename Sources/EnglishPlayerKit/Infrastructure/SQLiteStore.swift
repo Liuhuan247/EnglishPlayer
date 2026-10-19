@@ -1,7 +1,7 @@
 import Foundation
 import SQLite3
 
-/// 媒体、句子、进度、缓存索引和设置都进这一份库。网盘 Token 不在这里。
+/// 媒体、句子、进度、缓存索引、设置，以及百度网盘登录信息都进这一份库。
 final class SQLiteStore {
     private var db: OpaquePointer?
     private let queue = DispatchQueue(label: "EnglishPlayer.sqlite")
@@ -243,6 +243,24 @@ final class SQLiteStore {
         }
     }
 
+    func setCredential(account: String, value: String) throws {
+        try run(
+            "INSERT INTO credentials (account, value) VALUES (?, ?) ON CONFLICT(account) DO UPDATE SET value = excluded.value",
+            [.text(account), .text(value)]
+        )
+    }
+
+    func credential(account: String) throws -> String? {
+        try withStatement("SELECT value FROM credentials WHERE account = ?", [.text(account)]) { stmt in
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return columnText(stmt, 0)
+        }
+    }
+
+    func removeCredential(account: String) throws {
+        try run("DELETE FROM credentials WHERE account = ?", [.text(account)])
+    }
+
     func allSettings() throws -> [String: String] {
         try withStatement("SELECT key, value FROM settings", []) { stmt in
             var map: [String: String] = [:]
@@ -361,6 +379,12 @@ final class SQLiteStore {
             """
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS credentials (
+                account TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
             """

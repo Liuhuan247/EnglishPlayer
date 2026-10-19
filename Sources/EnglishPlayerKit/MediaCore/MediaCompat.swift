@@ -18,6 +18,9 @@ enum MediaCompat {
         if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
             candidates.insert(support.appendingPathComponent("EnglishPlayer/bin/ffmpeg").path, at: 0)
         }
+        if let executable = Bundle.main.executableURL {
+            candidates.insert(executable.deletingLastPathComponent().appendingPathComponent("ffmpeg").path, at: 0)
+        }
         if let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
             return URL(fileURLWithPath: found)
         }

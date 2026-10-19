@@ -45,7 +45,13 @@ extension MediaCoreProtocol {
 }
 
 protocol WaveformExtracting: Sendable {
-    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int) async throws -> [Float]
+    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int, headers: [String: String]) async throws -> [Float]
+}
+
+extension WaveformExtracting {
+    func extractPeaks(from url: URL, start: Double, end: Double, buckets: Int) async throws -> [Float] {
+        try await extractPeaks(from: url, start: start, end: end, buckets: buckets, headers: [:])
+    }
 }
 
 /// V2 跟读录音。V1 只留接口，避免以后改波形数据结构。

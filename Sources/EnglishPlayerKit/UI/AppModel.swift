@@ -8,6 +8,8 @@ public final class AppModel: ObservableObject {
     @Published public var section: AppSection = .player
     @Published public var toast: String?
     @Published public var dictionaryAlert: String?
+    /// 播放列表从播放器底栏弹出，不另开窗口。
+    @Published public var playlistOpen = false
 
     let library: LibraryService
     let session: PlaybackSession
@@ -75,7 +77,7 @@ public final class AppModel: ObservableObject {
         }
         let waveforms = WaveformService(directory: support.appendingPathComponent("Waveforms", isDirectory: true))
         let session = PlaybackSession(core: MPVPlayerKit() ?? AVPlayerKit(), library: library, waveforms: waveforms)
-        let netdisk = NetdiskService(store: store, cache: cache, credentials: KeychainStore())
+        let netdisk = NetdiskService(store: store, cache: cache, credentials: SQLiteCredentialStore(store: store))
         return AppModel(
             library: library,
             session: session,

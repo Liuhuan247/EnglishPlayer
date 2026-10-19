@@ -167,7 +167,7 @@ struct AppSettings: Equatable {
     var defaultRate: Double = 1
     var cacheLimitBytes: Int64 = 10 * 1024 * 1024 * 1024
     var subtitleMode: SubtitleMode = .bilingual
-    var fontSize: Double = 23
+    var fontSize: Double = 42
     var preservePitch: Bool = true
     var autoResume: Bool = true
     var continuousPlay: Bool = true
@@ -177,7 +177,7 @@ struct AppSettings: Equatable {
     var lastMediaID: String?
     var cacheDirectory: String?
 
-    static let fontRange = 18.0...32.0
+    static let fontRange = 28.0...56.0
 }
 
 enum TimeFormat {

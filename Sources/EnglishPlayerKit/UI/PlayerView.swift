@@ -183,7 +183,7 @@ struct PlayerScreen: View {
                 }
             }
         }
-        .frame(width: 280)
+        .frame(width: 500)
         .background(theme.sidebar)
         .overlay(alignment: .leading) { theme.separator.frame(width: 1) }
     }
@@ -199,21 +199,21 @@ struct PlayerScreen: View {
                 Rectangle()
                     .fill(isCurrent ? theme.accent : Color.clear)
                     .frame(width: 3)
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text("#\(sentence.displayIndex) · \(TimeFormat.clock(sentence.startTime + session.offset))")
-                        .font(.system(size: 10.5, weight: .semibold))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(theme.text3)
-                    if session.subtitleMode != .chinese {
-                        Text(sentence.textEn.isEmpty ? " " : sentence.textEn)
-                            .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
+                    if !sentence.textEn.isEmpty {
+                        Text(sentence.textEn)
+                            .font(.system(size: 19, weight: isCurrent ? .semibold : .regular))
                             .foregroundStyle(isCurrent ? theme.accentDeep : theme.text)
                             .lineLimit(4)
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    if session.subtitleMode == .bilingual || session.subtitleMode == .chinese, !sentence.textZh.isEmpty {
+                    if !sentence.textZh.isEmpty {
                         Text(sentence.textZh)
-                            .font(.system(size: 11))
+                            .font(.system(size: 17))
                             .foregroundStyle(theme.text2)
                             .lineLimit(3)
                             .multilineTextAlignment(.leading)
@@ -372,11 +372,11 @@ struct PlayerScreen: View {
     private func bumpChrome(after seconds: Double = 2.4) {
         showChrome = true
         chromeTask?.cancel()
-        guard session.isPlaying, session.currentItem != nil, !session.showsLoading, !volumeOpen, !pointerOnControls, !pointerOnHandle else { return }
+        guard session.isPlaying, session.currentItem != nil, !session.showsLoading, !volumeOpen, !model.playlistOpen, !pointerOnControls, !pointerOnHandle else { return }
         chromeTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            guard session.isPlaying, !session.showsLoading, !volumeOpen, !pointerOnControls, !pointerOnHandle else { return }
+            guard session.isPlaying, !session.showsLoading, !volumeOpen, !model.playlistOpen, !pointerOnControls, !pointerOnHandle else { return }
             showChrome = false
         }
     }
@@ -491,7 +491,7 @@ struct PlayerScreen: View {
             }
             if hasChinese {
                 Text(chinese)
-                    .font(.system(size: max(15, session.fontSize * 0.68), weight: .semibold))
+                    .font(.system(size: max(22, session.fontSize * 0.78), weight: .semibold))
                     .foregroundStyle(Color(red: 1, green: 0.84, blue: 0.2))
                     .captionOutline(true)
                     .multilineTextAlignment(.center)
@@ -499,7 +499,7 @@ struct PlayerScreen: View {
             }
         }
         .padding(.horizontal, 28)
-        .frame(maxWidth: 820)
+        .frame(maxWidth: 980)
         .frame(maxWidth: .infinity)
         .opacity(session.subtitleMode == .hidden ? 0 : 1)
     }
@@ -551,10 +551,10 @@ struct PlayerScreen: View {
                     IconButton(systemName: "repeat.1", help: "单句循环", active: session.loopMode == .sentence) {
                         model.showToast(session.toggleSentenceLoop())
                     }
-                    IconButton(systemName: "arrow.left.arrow.right", help: "A-B 循环。进度条上可拖动两端", active: session.loopMode == .ab || session.abStart != nil) {
+                    IconButton(systemName: "arrow.left.arrow.right", help: "按句 A-B。点一下记起点句，再点记结束句。进度条上可拖动", active: session.loopMode == .ab || session.abStart != nil) {
                         model.showToast(session.cycleAB())
                     }
-                    IconButton(systemName: subtitleSymbol, help: "字幕显示：\(session.subtitleMode.title)", active: session.subtitleMode == .hidden) {
+                    IconButton(systemName: subtitleSymbol, help: "画面字幕：\(session.subtitleMode.title)。不改变右侧列表", active: session.subtitleMode == .hidden) {
                         cycleSubtitleMode()
                     }
                     IconButton(
@@ -570,6 +570,7 @@ struct PlayerScreen: View {
                     Spacer(minLength: 0)
                     speedMenu
                     volumeButton
+                    playlistButton
                 }
                 HStack(spacing: 8) {
                     IconButton(systemName: "backward.end.fill", help: "上一句") { session.previousSentence() }
@@ -591,6 +592,28 @@ struct PlayerScreen: View {
         .background(theme.surface)
         .overlay(alignment: .top) { theme.separator.frame(height: 1) }
         .shadow(color: .black.opacity(0.28), radius: 14, y: -4)
+    }
+
+    private var playlistButton: some View {
+        IconButton(systemName: "list.bullet", help: "播放列表", active: model.playlistOpen) {
+            model.playlistOpen.toggle()
+            if model.playlistOpen { revealChrome() }
+        }
+        .popover(isPresented: Binding(
+            get: { model.playlistOpen },
+            set: { model.playlistOpen = $0 }
+        ), arrowEdge: .bottom) {
+            PlaylistScreen(compact: true)
+                .environmentObject(model)
+                .environmentObject(session)
+                .environmentObject(model.library)
+                .environmentObject(model.netdisk)
+                .environment(\.theme, theme)
+                .frame(width: 520, height: 460)
+        }
+        .onChange(of: model.playlistOpen) { _, open in
+            if open { revealChrome() }
+        }
     }
 
     private var volumeButton: some View {
@@ -693,7 +716,7 @@ struct PlayerScreen: View {
         guard let index = order.firstIndex(of: session.subtitleMode) else { return }
         let next = order[(index + 1) % order.count]
         session.setSubtitleMode(next)
-        model.showToast(next == .hidden ? "字幕已隐藏 · 盲听模式" : "字幕显示：\(next.title)")
+        model.showToast(next == .hidden ? "画面字幕已隐藏" : "画面字幕：\(next.title)")
     }
 
     private var statusBar: some View {
