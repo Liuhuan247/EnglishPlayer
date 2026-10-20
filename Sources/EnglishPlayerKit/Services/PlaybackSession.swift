@@ -186,8 +186,9 @@ final class PlaybackSession: ObservableObject {
         offset = fresh.subtitleOffset
         didFinish = false
 
+        let contentEnd = sentences.last.map { $0.endTime + offset }
         let resume = library.settings.autoResume ? fresh.lastPosition : 0
-        if resume > 0.4, resume < duration - 0.4 {
+        if PlaybackResume.allows(resume, duration: duration, contentEnd: contentEnd) {
             await core.seek(to: resume)
             currentTime = resume
             if let index = engine.containingIndex(at: resume, offset: offset) {
@@ -196,6 +197,10 @@ final class PlaybackSession: ObservableObject {
             }
         } else {
             currentTime = 0
+            // 旧断点停在结尾附近时清掉，避免下次打开还被当成未看完。
+            if fresh.lastPosition > 0.4 {
+                fresh.lastPosition = 0
+            }
         }
         rate = library.settings.defaultRate
         core.setRate(rate)
@@ -396,9 +401,10 @@ final class PlaybackSession: ObservableObject {
         isBuffering = false
     }
 
-    func persist() {
+    func persist(finished: Bool = false) {
         guard var item = currentItem else { return }
-        let position = currentTime
+        // 自然播完清断点。否则重开同一集会续到结尾附近，立刻再触发结束并跳下一集。
+        let position = finished ? 0 : currentTime
         item.lastPosition = position
         item.duration = duration
         item.subtitleOffset = offset
@@ -443,7 +449,7 @@ final class PlaybackSession: ObservableObject {
             didFinish = true
             core.pause()
             isPlaying = false
-            persist()
+            persist(finished: true)
             onFinished?()
         case .idle:
             isPlaying = core.isPlaying
@@ -574,5 +580,15 @@ final class PlaybackSession: ObservableObject {
             copy.id = "\(mediaID)#\(index)"
             return copy
         }
+    }
+}
+
+/// 断点续播门槛。接近片尾或最后一句结束附近时不续播，避免重看立刻再触发「播完」。
+enum PlaybackResume {
+    static func allows(_ position: Double, duration: Double, contentEnd: Double?) -> Bool {
+        guard position > 0.4 else { return false }
+        if duration > 0, position >= duration - 0.4 { return false }
+        if let contentEnd, contentEnd > 0, position >= contentEnd - 0.5 { return false }
+        return true
     }
 }
