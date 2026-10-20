@@ -532,6 +532,16 @@ final class NetdiskServiceTests: XCTestCase {
     }
 }
 
+final class PlaybackResumeTests: XCTestCase {
+    func testRejectsNearEndAndNearLastSentence() {
+        XCTAssertTrue(PlaybackResume.allows(30, duration: 120, contentEnd: 110))
+        XCTAssertFalse(PlaybackResume.allows(0.2, duration: 120, contentEnd: 110))
+        XCTAssertFalse(PlaybackResume.allows(119.8, duration: 120, contentEnd: 110))
+        XCTAssertFalse(PlaybackResume.allows(109.7, duration: 120, contentEnd: 110))
+        XCTAssertTrue(PlaybackResume.allows(50, duration: 0, contentEnd: nil))
+    }
+}
+
 @MainActor
 final class PlaybackSessionTests: XCTestCase {
     func testJumpSeeksToSentenceStart() async throws {
@@ -568,6 +578,9 @@ final class PlaybackSessionTests: XCTestCase {
         let reopened = LibraryService(store: try SQLiteStore(path: directory.appendingPathComponent("db.sqlite").path))
         XCTAssertEqual(reopened.media(id: item.id)?.lastPosition ?? -1, session.currentTime, accuracy: 0.05)
         XCTAssertEqual(reopened.settings.lastMediaID, item.id)
+        session.persist(finished: true)
+        let finished = LibraryService(store: try SQLiteStore(path: directory.appendingPathComponent("db.sqlite").path))
+        XCTAssertEqual(finished.media(id: item.id)?.lastPosition ?? -1, 0, accuracy: 0.001)
     }
 
     func testDamagedAndUnsupportedDoNotCrash() async throws {
